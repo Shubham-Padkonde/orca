@@ -20,7 +20,9 @@ function pdfFileSink(file: FsFile): MobileMediaSink {
   file.create({ overwrite: true })
   const handle = file.open()
   return {
-    append: (bytes) => handle.writeBytes(bytes),
+    // Expo's JSI rejects the buffer polyfill's Uint8Array subclass, so pass a plain view.
+    append: (bytes) =>
+      handle.writeBytes(new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength)),
     finish: () => {
       handle.close()
       return Platform.OS === 'android' ? file.contentUri : file.uri
