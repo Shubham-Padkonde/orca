@@ -109,24 +109,22 @@ export function useNewWorktreeRuntimeCapabilities(
         capabilityProbeRef.current = probe
       }
       const capabilities = await probe.promise
+      const current = capabilityProbeRef.current
       if (
-        client?.getGeneration?.() !== generation ||
-        client?.getLastConnectedAt() !== connectedAt
+        current === probe &&
+        client?.getGeneration?.() === generation &&
+        client?.getLastConnectedAt() === connectedAt
       ) {
-        // A reconnect or path switch keeps the host; wait for the current connection's answer.
-        if (capabilityProbeRef.current?.client === client) {
-          continue
+        if (!capabilities) {
+          // Probe failure does not establish missing host support.
+          capabilityProbeRef.current = null
         }
+        return capabilities
+      }
+      // A reconnect or path switch keeps the host; wait for the current connection's answer.
+      if (current?.client !== client) {
         return null
       }
-      if (capabilityProbeRef.current !== probe) {
-        return null
-      }
-      if (!capabilities) {
-        // Probe failure does not establish missing host support.
-        capabilityProbeRef.current = null
-      }
-      return capabilities
     }
   }, [client])
 
