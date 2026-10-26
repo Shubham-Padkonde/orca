@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useFocusEffect } from 'expo-router'
 import { ActivityIndicator, Pressable, Text, View } from 'react-native'
 import { colors } from '../theme/mobile-theme'
 import { usePdfOpener } from '../platform/pdf-opener'
@@ -9,7 +10,7 @@ import { MobileLoadErrorState } from '../components/MobileLoadErrorState'
 
 type State =
   | { status: 'opening' }
-  | { status: 'opened' }
+  | { status: 'idle' }
   | { status: 'failed'; message: string; retryable: boolean }
 
 // The shell downloads the PDF and shows it in Quick Look (iOS) or the system viewer (Android).
@@ -17,18 +18,27 @@ export function MobilePdfPreview({ media }: { media: MobileFileMedia }) {
   const opener = usePdfOpener()
   const [state, setState] = useState<State>({ status: 'opening' })
   const [attempt, setAttempt] = useState(0)
+  const stopPending = useRef<(() => void) | null>(null)
   const { worktreeId, relativePath, mimeType } = media
   useEffect(() => {
     if (!opener) {
       return
     }
     let pending = true
+    const stop = () => {
+      if (pending) {
+        pending = false
+        opener.cancel()
+        setState({ status: 'idle' })
+      }
+    }
+    stopPending.current = stop
     setState({ status: 'opening' })
     opener.open({ worktreeId, relativePath, mimeType }).then(
       () => {
         if (pending) {
           pending = false
-          setState({ status: 'opened' })
+          setState({ status: 'idle' })
         }
       },
       (error: unknown) => {
@@ -42,13 +52,10 @@ export function MobilePdfPreview({ media }: { media: MobileFileMedia }) {
         }
       }
     )
-    return () => {
-      if (pending) {
-        pending = false
-        opener.cancel()
-      }
-    }
+    return stop
   }, [opener, worktreeId, relativePath, mimeType, attempt])
+  // Hidden stack screens stay mounted, so leaving one must stop its open too.
+  useFocusEffect(useCallback(() => () => stopPending.current?.(), []))
   const reopen = () => setAttempt((count) => count + 1)
   if (!opener) {
     return (
