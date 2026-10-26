@@ -540,6 +540,26 @@ describe('WslHostService', () => {
     expect(connector.connect).toHaveBeenCalledTimes(1)
   })
 
+  it('a due automation boots a parked host once, and never with the experiment off', async () => {
+    const connector = makeConnector([UBUNTU])
+    const service = makeService(connector)
+    await service.add({ distro: 'Ubuntu' })
+    await connector.disconnect('Ubuntu')
+    service.handleConnectionChange('Ubuntu', null, {
+      state: 'distro-stopped',
+      terminals: 'exited',
+      recovering: false
+    })
+    connector.connect.mockClear()
+    enabled = false
+    await service.wakeForAutomation('wsl:ubuntu')
+    expect(connector.connect).not.toHaveBeenCalled()
+    enabled = true
+    await service.wakeForAutomation('wsl:ubuntu')
+    expect(connector.connect).toHaveBeenCalledExactlyOnceWith('Ubuntu')
+    await expect(service.isConnected('wsl:ubuntu')).resolves.toBe(true)
+  })
+
   it('lifts a park on an explicit Connect', async () => {
     const connector = makeConnector([UBUNTU])
     const service = makeService(connector)
