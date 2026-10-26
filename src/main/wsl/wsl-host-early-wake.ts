@@ -1,7 +1,7 @@
 /**
- * Boots the WSL distros the last run had open work on, at the very start of the next launch, so
- * the distro boot (seconds on a slow PC) overlaps the app's own startup instead of following it.
- * Only distros the user had open work on are ever listed (E9: never wake one they did not open).
+ * Boots the distro of the WSL host the last run had focused, at the very start of the next launch,
+ * so the boot (seconds on a slow PC) overlaps the app's own startup instead of following it. Only
+ * the focused host is listed (E9: a launch boots the focused host, never others with saved tabs).
  */
 import { join } from 'node:path'
 import { z } from 'zod'
@@ -33,7 +33,7 @@ function readWakeList(userDataPath: string): string[] {
   }
 }
 
-/** Saves the distros with open work right now; called whenever that set changes. */
+/** Saves the distro of the host the user is focused on (or none); called on each focus entry. */
 export function rememberWslHostsToWake(userDataPath: string, distros: readonly string[]): void {
   const next = [...new Set(distros)].sort()
   const current = readWakeList(userDataPath)
