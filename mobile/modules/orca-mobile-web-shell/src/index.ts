@@ -41,7 +41,7 @@ export const OrcaMobileWebShellView: ComponentType<
 >('OrcaMobileWebShell')
 
 // iOS shows the file:// URI in Quick Look; Android hands the content:// URI to the system PDF viewer with read access.
-// Android rejects with code ERR_NO_PDF_VIEWER when no installed app opens PDFs.
+// Android rejects with code native_pdf_no_viewer when no installed app opens PDFs.
 export function presentPdf(uri: string): Promise<void> {
   return requireNativeModule<{ presentPdf: (uri: string) => Promise<void> }>(
     'OrcaMobileWebShell'

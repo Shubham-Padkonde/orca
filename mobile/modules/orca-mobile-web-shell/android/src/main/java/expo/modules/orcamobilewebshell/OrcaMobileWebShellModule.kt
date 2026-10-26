@@ -22,7 +22,8 @@ class OrcaMobileWebShellModule : Module() {
       try {
         activity.startActivity(intent)
       } catch (error: ActivityNotFoundException) {
-        throw CodedException("ERR_NO_PDF_VIEWER", "No installed app opens PDFs", error)
+        // The bridge forwards this code to the page as a refusal it can name.
+        throw CodedException("native_pdf_no_viewer", "No installed app opens PDFs", error)
       }
     }
 

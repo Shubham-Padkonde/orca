@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useFocusEffect } from 'expo-router'
-import { ActivityIndicator, Pressable, Text, View } from 'react-native'
+import { ActivityIndicator, Text, View } from 'react-native'
 import { colors } from '../theme/mobile-theme'
 import { usePdfOpener } from '../platform/pdf-opener'
 import { PdfNoViewerError } from '../platform/pdf-opener-contract'
 import type { MobileFileMedia } from './mobile-file-media'
 import { filePreviewStyles as styles } from './mobile-file-preview-styles'
-import { MobileLoadErrorState } from '../components/MobileLoadErrorState'
+import { MobileLoadErrorState, MobileStateButton } from '../components/MobileLoadErrorState'
 
 type State =
   | { status: 'opening' }
@@ -19,41 +19,37 @@ export function MobilePdfPreview({ media }: { media: MobileFileMedia }) {
   const [state, setState] = useState<State>({ status: 'opening' })
   const [attempt, setAttempt] = useState(0)
   const stopPending = useRef<(() => void) | null>(null)
-  const { worktreeId, relativePath, mimeType } = media
+  const { worktreeId, relativePath } = media
   useEffect(() => {
     if (!opener) {
       return
     }
     let pending = true
-    const stop = () => {
+    const settle = (next: State) => {
       if (pending) {
         pending = false
-        opener.cancel()
-        setState({ status: 'idle' })
+        setState(next)
       }
+    }
+    const stop = () => {
+      if (pending) {
+        opener.cancel()
+      }
+      settle({ status: 'idle' })
     }
     stopPending.current = stop
     setState({ status: 'opening' })
-    opener.open({ worktreeId, relativePath, mimeType }).then(
-      () => {
-        if (pending) {
-          pending = false
-          setState({ status: 'idle' })
-        }
-      },
-      (error: unknown) => {
-        if (pending) {
-          pending = false
-          setState({
-            status: 'failed',
-            message: error instanceof Error ? error.message : 'Unable to open this PDF',
-            retryable: !(error instanceof PdfNoViewerError)
-          })
-        }
-      }
+    opener.open({ worktreeId, relativePath }).then(
+      () => settle({ status: 'idle' }),
+      (error: unknown) =>
+        settle({
+          status: 'failed',
+          message: error instanceof Error ? error.message : 'Unable to open this PDF',
+          retryable: !(error instanceof PdfNoViewerError)
+        })
     )
     return stop
-  }, [opener, worktreeId, relativePath, mimeType, attempt])
+  }, [opener, worktreeId, relativePath, attempt])
   // Hidden stack screens stay mounted, so leaving one must stop its open too.
   useFocusEffect(useCallback(() => () => stopPending.current?.(), []))
   const reopen = () => setAttempt((count) => count + 1)
@@ -79,9 +75,7 @@ export function MobilePdfPreview({ media }: { media: MobileFileMedia }) {
   }
   return (
     <View style={styles.state}>
-      <Pressable style={styles.openButton} onPress={reopen} accessibilityRole="button">
-        <Text style={styles.openButtonText}>Open PDF</Text>
-      </Pressable>
+      <MobileStateButton label="Open PDF" onPress={reopen} />
     </View>
   )
 }

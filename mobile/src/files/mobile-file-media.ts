@@ -14,12 +14,13 @@ export function mobileFileMedia(worktreeId: string, relativePath?: string): Mobi
 }
 
 // PDFs count as media because they share the download-then-device-viewer path, opened by the shell instead of a <video>.
+const MOBILE_FILE_MEDIA_MIME_TYPES: Record<string, string> = {
+  ...MEDIA_FILE_MIME_TYPES,
+  '.pdf': PDF_MIME_TYPE
+}
+
 export function mobileFileMediaMime(path: string): string | null {
   const name = path.split(/[/\\]/).pop() ?? ''
   const dot = name.lastIndexOf('.')
-  if (dot <= 0) {
-    return null
-  }
-  const extension = name.slice(dot).toLowerCase()
-  return extension === '.pdf' ? PDF_MIME_TYPE : (MEDIA_FILE_MIME_TYPES[extension] ?? null)
+  return dot > 0 ? (MOBILE_FILE_MEDIA_MIME_TYPES[name.slice(dot).toLowerCase()] ?? null) : null
 }

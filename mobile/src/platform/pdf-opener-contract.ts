@@ -1,8 +1,6 @@
-import type { MobileFileMedia } from '../files/mobile-file-media'
-
 // cancel stops a download the user walked away from, so no viewer opens over the next screen.
 export type PdfOpener = {
-  open: (media: MobileFileMedia) => Promise<void>
+  open: (file: { worktreeId: string; relativePath: string }) => Promise<void>
   cancel: () => void
 }
 

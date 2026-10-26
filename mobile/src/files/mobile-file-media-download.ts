@@ -86,7 +86,9 @@ export async function downloadMobileFileMedia(
         await chunkRead.request(client, { ...params, offset, length }, options)
       )
       checkDownloadActive(signal)
-      const bytes = Buffer.from(chunk.contentBase64, 'base64')
+      const decoded = Buffer.from(chunk.contentBase64, 'base64')
+      // Hand sinks a plain Uint8Array: Expo's JSI rejects the polyfill's Buffer subclass.
+      const bytes = new Uint8Array(decoded.buffer, decoded.byteOffset, decoded.byteLength)
       if (
         bytes.byteLength !== chunk.bytesRead ||
         chunk.bytesRead === 0 ||
