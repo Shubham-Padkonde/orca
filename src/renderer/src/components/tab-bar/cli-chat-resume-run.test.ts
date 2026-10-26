@@ -276,8 +276,8 @@ describe('CLI identity resume through the existing launch owner', () => {
     })
     await runCliChatResume(SOURCE, true)
     expect(mocks.toast).toHaveBeenCalledTimes(1)
-    expect(mocks.toast.mock.calls[0]?.[0]).toMatch(
-      /^Orca can't confirm Claude.* has exited in its terminal\. Stop what's running there or close the terminal, then open this conversation from Session History\.$/
+    expect(mocks.toast.mock.calls[0]?.[0]).toBe(
+      'Claude is already running this conversation in another terminal. Quit Claude there or close that terminal, then open this conversation from Session History.'
     )
     expect(mocks.activate).not.toHaveBeenCalled()
     expect(tabs()).toEqual([])

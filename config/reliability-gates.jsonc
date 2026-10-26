@@ -485,6 +485,79 @@
       "demotionRule": "Keep experimental or demote if recovery signals an unverified owner, treats loss of contact as exit, reports success before descendant exit, adds background scanning, or lets a recovery failure block the current-daemon restart."
     },
     {
+      "id": "terminal-runtime.darwin-worker-wakeup",
+      "title": "Idle Darwin workers refresh their waits and continue delivering asynchronous terminal work",
+      "maturity": "experimental",
+      "protection": "partial",
+      "owner": "terminal-runtime",
+      "layer": "native-runtime",
+      "surfaces": ["packaged macOS terminal helper", "terminal input", "terminal creation"],
+      "platforms": ["macos"],
+      "providers": ["daemon", "local", "ssh", "remote-runtime", "mobile-relay"],
+      "coveredPlatforms": ["macos"],
+      "coveredProviders": ["daemon"],
+      "coverageNotes": "The repository arm64 build and x64 build under Rosetta passed real PTY input, filesystem/DNS/crypto and idle-wait generation checks; physical ARM and Intel CI passed on Node 24.21.0. Node 24.22.1 arm64 passed the same native oracle locally; its official unpatched runtime failed idle refresh. Fresh physical ARM/Intel CI remains required. An isolated signed installed helper with patched Node also served a PTY. A complete package build and older macOS remain unverified. Standalone/SSH servers and the Electron fallback do not receive the patch; mobile/relay inherit only their execution host runtime.",
+      "motivatingLinks": [
+        "docs/bug-reproductions/darwin-worker-wakeup.md",
+        "https://github.com/libuv/libuv/pull/5351"
+      ],
+      "invariant": "A packaged Darwin terminal worker must not remain indefinitely parked on a stale condition generation while asynchronous work is queued; process and session ownership must remain unchanged.",
+      "oracle": "Four real idle workers each advance their low 32-bit psynch wait generation within the 31-second observation interval, with at most sixteen generation steps, and real PTY input plus filesystem/DNS/crypto work completes. The upstream half-range witness stalls unpatched workers with queued jobs and completes with the patch.",
+      "commands": ["ORCA_BACKGROUND_LAUNCH=1 node config/scripts/verify-darwin-terminal-node.mjs"],
+      "testFiles": ["config/scripts/verify-darwin-terminal-node.mjs"],
+      "assertionRefs": [
+        {
+          "file": "config/scripts/verify-darwin-terminal-node.mjs",
+          "assertions": ["Runtime proof failed"]
+        }
+      ],
+      "evidenceRuns": [
+        {
+          "date": "2026-10-23",
+          "runner": "local",
+          "platform": "macos",
+          "command": "ORCA_BACKGROUND_LAUNCH=1 node config/scripts/verify-darwin-terminal-node.mjs",
+          "result": "passed",
+          "durationSeconds": 2231,
+          "summary": "Cold source build of pinned Node 24.22.1 arm64 passed architecture/minimum-OS checks, real PTY input, fs/DNS/crypto and all four bounded idle-wait generation checks. Official Node 24.22.1 failed the same idle-refresh assertion after passing the initial PTY and I/O checks. Timing includes cold compilation and source cleanup."
+        },
+        {
+          "date": "2026-10-15",
+          "runner": "manual",
+          "platform": "macos",
+          "command": "ORCA_BACKGROUND_LAUNCH=1 node config/scripts/verify-darwin-terminal-node.mjs",
+          "result": "passed",
+          "durationSeconds": 32,
+          "summary": "Repository-built Node 24.21.0 arm64 passed real PTY input, fs/DNS/crypto and all four bounded idle-generation checks. Cached verifier execution took about 32 seconds; this is not full package-build proof."
+        }
+      ],
+      "runtimeBudget": {
+        "p95Seconds": 10800,
+        "scope": "Cold pinned Node source compilation dominates; Intel exceeded the initial 90-minute job allowance, now 180 minutes. Cached native runtime probe takes about 32 seconds. No CI soak yet."
+      },
+      "performanceBudget": {
+        "required": true,
+        "evidence": "One relative timeout per idle worker per 30 seconds, at most eight wakes/minute for the default pool; immediate signals remain. Generation advancement is bounded by the native probe. No application polling or session scans added."
+      },
+      "flakeHistory": {
+        "status": "not-started",
+        "evidence": "Focused native and manual Node checks passed on arm64; both physical architectures passed on Node 24.21.0; the updated recipe and repeated CI soak remain pending."
+      },
+      "redGreenEvidence": {
+        "status": "complete",
+        "evidence": "Upstream real-worker half-range witness: baseline four idle workers with zero jobs/callbacks and queued work; patch four jobs/callbacks and empty queue. An ordinary sequential workload also reproduced the exact half-range signature, zero fresh stat callbacks and no real PTY echo after 15 seconds. The patched runtime completed 30 million sequential jobs, a fresh stat and real PTY echo. Idle-generation regression fails without the patch and passes with it."
+      },
+      "promotionCriteria": [
+        "Collect physical arm64/Intel CI, signed helper launch and older macOS evidence, then repeated soak before promotion."
+      ],
+      "knownGaps": [
+        "Ordinary sequential jobs reproduced half-range waiter starvation and PTY input loss; scheduling is intermittent and the exact Orca job-producer sequence remains unknown.",
+        "No older macOS, full package build, launchd/TCC attribution or battery measurement yet.",
+        "Existing daemons require deliberate restart; standalone/SSH macOS servers and Electron fallback remain unpatched."
+      ],
+      "demotionRule": "Keep experimental until native runtime and signed packaging evidence is stable; investigate failures without weakening generation bounds or silently using an official unpatched binary."
+    },
+    {
       "id": "agent-session.delayed-terminal-launch",
       "title": "Delayed terminal launches retain their harness preparation and recover process discovery",
       "maturity": "experimental",
@@ -682,7 +755,7 @@
       "oracle": "After acknowledged phone replies with stale host status, the exact card disappears and Send is enabled; unknown, refused or unverifiable-settlement replies retain enabled choices, while an older host's accepted reply dismisses like an acknowledged one; a same-occurrence view toggle retains pending acknowledgment and real replacements discard it. A slow 32 KiB SSH answer completes all chunks before Enter; cancellation preserves issued bytes but omits remaining groups. Paired settlement invokes the actual provider and lost callbacks remain unknown; older hosts deliver ordinary messages, launch and selector groups once and their accepted answers dismiss as before. An answered card stays hidden across a view remount; a collapsed card is a strip that frees the composer and expands back; an identical question in a new wait shows again; a composer send caught by a new card keeps its bubble without submitting or clearing the line under it.",
       "commands": [
         "ORCA_BACKGROUND_LAUNCH=1 pnpm test src/renderer/src/components/native-chat/NativeChatInteractiveCard.test.tsx src/renderer/src/components/native-chat/use-native-chat-interactive-send.test.tsx src/renderer/src/components/native-chat/native-chat-observed-send.test.ts src/renderer/src/components/native-chat/native-chat-runtime-send.test.ts src/renderer/src/components/native-chat/native-chat-runtime-send-launch-draft.test.ts src/renderer/src/components/native-chat/NativeChatResolvedView.prompt-card-input.test.tsx src/renderer/src/components/native-chat/NativeChatResolvedView.prompt-card-composer.test.tsx src/renderer/src/components/native-chat/use-native-chat-prompt-card-presentation.test.ts src/renderer/src/runtime/runtime-terminal-verified-input.test.ts src/renderer/src/components/native-chat/NativeChatComposer.test.tsx src/renderer/src/components/native-chat/NativeChatResolvedView.turn-status.test.tsx src/renderer/src/components/native-chat/NativeChatApprovalCard.test.tsx src/renderer/src/components/native-chat/native-chat-interactive-prompt.test.ts src/renderer/src/runtime/runtime-terminal-inspection.test.ts src/renderer/src/lib/agent-paste-draft.test.ts src/renderer/src/lib/agent-paste-draft-submit-retry.test.ts src/renderer/src/lib/agent-followup-delivery.test.ts src/main/ipc/pty/ipc/write-input-acceptance.test.ts src/main/ipc/pty/ipc/write-input-user-input.test.ts src/main/ipc/pty/ipc/write-input-chunk-yield.test.ts src/main/ipc/pty/pty-write-ipc-validation.test.ts src/main/daemon/daemon-pty-write-settlement-recovery.test.ts src/main/runtime/runtime-terminal-writer.test.ts src/main/runtime/rpc/terminal-send.test.ts src/main/runtime/rpc/terminal-send-launch-draft-resolution.test.ts src/main/runtime/terminal-send-stale-leaf-liveness.test.ts src/renderer/src/lib/agent-paste-draft-readiness-budget.test.ts tests/e2e/native-chat-ssh-delivery.unit.test.ts --maxWorkers=2",
-        "ORCA_BACKGROUND_LAUNCH=1 mobile/node_modules/.bin/vitest run --config mobile/vitest.config.ts mobile/src/session/MobileNativeChatView.prompt-presentation.test.ts mobile/src/session/use-mobile-native-chat-controller.test.ts mobile/src/session/use-mobile-native-chat-ask-dismiss.test.ts mobile/src/session/MobileNativeChatView.stop.test.ts mobile/src/session/MobileNativeChatView.failure-banner.test.ts mobile/src/session/MobileNativeChatView.rows.test.ts mobile/src/session/MobileNativeChatView.composer-lock.test.ts mobile/src/session/MobileNativeChatView.tail-follow.test.ts mobile/src/session/MobileNativeChatView.history-paging.test.ts mobile/src/session/mobile-prompt-controller.test.ts mobile/src/session/mobile-native-chat-permission-send.test.ts mobile/src/session/use-mobile-native-chat-cancel-ask.test.ts mobile/src/session/use-mobile-native-chat-answer-send.test.ts mobile/src/session/use-mobile-native-chat-message-send.test.ts mobile/src/session/mobile-native-chat-send.test.ts mobile/src/session/MobileNativeChatCardHeaderAction.test.tsx mobile/src/session/MobileNativeChatPromptCard.test.tsx --maxWorkers=2",
+        "ORCA_BACKGROUND_LAUNCH=1 mobile/node_modules/.bin/vitest run --config mobile/vitest.config.ts mobile/src/session/MobileNativeChatView.prompt-presentation.test.ts mobile/src/session/use-mobile-native-chat-controller.test.ts mobile/src/session/use-mobile-native-chat-ask-dismiss.test.ts mobile/src/session/MobileNativeChatView.stop.test.ts mobile/src/session/MobileNativeChatView.failure-banner.test.ts mobile/src/session/MobileNativeChatView.rows.test.ts mobile/src/session/MobileNativeChatView.composer-lock.test.ts mobile/src/session/MobileNativeChatView.tail-follow.test.ts mobile/src/session/MobileNativeChatView.history-paging.test.ts mobile/src/session/mobile-prompt-controller.test.ts mobile/src/session/mobile-native-chat-permission-send.test.ts mobile/src/session/use-mobile-native-chat-cancel-ask.test.ts mobile/src/session/use-mobile-native-chat-answer-send.test.ts mobile/src/session/use-mobile-native-chat-message-send.test.ts mobile/src/session/native-chat/mobile-native-chat-send.test.ts mobile/src/session/MobileNativeChatCardHeaderAction.test.tsx mobile/src/session/MobileNativeChatPromptCard.test.tsx --maxWorkers=2",
         "ORCA_BACKGROUND_LAUNCH=1 pnpm test tests/e2e/cross-version-wire/cross-version-terminal-wire.unit.test.ts --maxWorkers=1",
         "ORCA_BACKGROUND_LAUNCH=1 pnpm test src/renderer/src/components/native-chat/NativeChatInteractiveCard.test.tsx src/renderer/src/components/native-chat/use-native-chat-interactive-send.test.tsx src/renderer/src/components/native-chat/native-chat-observed-send.test.ts src/renderer/src/components/native-chat/native-chat-runtime-send.test.ts src/renderer/src/components/native-chat/native-chat-runtime-send-launch-draft.test.ts src/renderer/src/components/native-chat/NativeChatResolvedView.prompt-card-input.test.tsx src/renderer/src/components/native-chat/NativeChatResolvedView.turn-status.test.tsx src/renderer/src/components/native-chat/NativeChatApprovalCard.test.tsx src/renderer/src/components/native-chat/native-chat-interactive-prompt.test.ts src/renderer/src/runtime/runtime-terminal-inspection.test.ts src/renderer/src/lib/agent-paste-draft.test.ts src/renderer/src/lib/agent-paste-draft-submit-retry.test.ts src/renderer/src/lib/agent-followup-delivery.test.ts src/main/ipc/pty/ipc/write-input-acceptance.test.ts src/main/ipc/pty/ipc/write-input-user-input.test.ts src/main/ipc/pty/ipc/write-input-chunk-yield.test.ts src/main/ipc/pty/pty-write-ipc-validation.test.ts src/main/daemon/daemon-pty-write-settlement-recovery.test.ts --maxWorkers=2",
         "ORCA_BACKGROUND_LAUNCH=1 mobile/node_modules/.bin/vitest run --config mobile/vitest.config.ts mobile/src/session/MobileNativeChatView.prompt-presentation.test.ts mobile/src/session/use-mobile-native-chat-controller.test.ts mobile/src/session/use-mobile-native-chat-ask-dismiss.test.ts mobile/src/session/MobileNativeChatView.stop.test.ts mobile/src/session/MobileNativeChatView.failure-banner.test.ts mobile/src/session/MobileNativeChatView.rows.test.ts mobile/src/session/MobileNativeChatView.composer-lock.test.ts mobile/src/session/MobileNativeChatView.tail-follow.test.ts mobile/src/session/MobileNativeChatView.history-paging.test.ts --maxWorkers=2"
@@ -730,7 +803,7 @@
         "mobile/src/session/use-mobile-native-chat-cancel-ask.test.ts",
         "mobile/src/session/use-mobile-native-chat-answer-send.test.ts",
         "mobile/src/session/use-mobile-native-chat-message-send.test.ts",
-        "mobile/src/session/mobile-native-chat-send.test.ts",
+        "mobile/src/session/native-chat/mobile-native-chat-send.test.ts",
         "mobile/src/session/MobileNativeChatCardHeaderAction.test.tsx",
         "mobile/src/session/MobileNativeChatPromptCard.test.tsx",
         "tests/e2e/cross-version-wire/cross-version-terminal-wire.unit.test.ts"
@@ -849,7 +922,8 @@
           "command": "ORCA_BACKGROUND_LAUNCH=1 mobile/node_modules/.bin/vitest run --config mobile/vitest.config.ts mobile/src/session/MobileNativeChatView.prompt-presentation.test.ts mobile/src/session/use-mobile-native-chat-controller.test.ts mobile/src/session/use-mobile-native-chat-ask-dismiss.test.ts mobile/src/session/MobileNativeChatView.stop.test.ts mobile/src/session/MobileNativeChatView.failure-banner.test.ts mobile/src/session/MobileNativeChatView.rows.test.ts mobile/src/session/MobileNativeChatView.composer-lock.test.ts mobile/src/session/MobileNativeChatView.tail-follow.test.ts mobile/src/session/MobileNativeChatView.history-paging.test.ts mobile/src/session/mobile-prompt-controller.test.ts mobile/src/session/mobile-native-chat-permission-send.test.ts mobile/src/session/use-mobile-native-chat-cancel-ask.test.ts mobile/src/session/use-mobile-native-chat-answer-send.test.ts mobile/src/session/use-mobile-native-chat-message-send.test.ts mobile/src/session/mobile-native-chat-send.test.ts mobile/src/session/MobileNativeChatCardHeaderAction.test.tsx mobile/src/session/MobileNativeChatPromptCard.test.tsx --maxWorkers=2",
           "result": "passed",
           "durationSeconds": 1.19,
-          "summary": "186 tests passed across 12 explicit files after the round-3 review fixes, including older-host answers dismissing like acknowledged ones, collapse that keeps the card mounted, one card per occurrence, wait-start question identity and only Send blocked."
+          "summary": "186 tests passed across 12 explicit files after the round-3 review fixes, including older-host answers dismissing like acknowledged ones, collapse that keeps the card mounted, one card per occurrence, wait-start question identity and only Send blocked.",
+          "currentCommand": "ORCA_BACKGROUND_LAUNCH=1 mobile/node_modules/.bin/vitest run --config mobile/vitest.config.ts mobile/src/session/MobileNativeChatView.prompt-presentation.test.ts mobile/src/session/use-mobile-native-chat-controller.test.ts mobile/src/session/use-mobile-native-chat-ask-dismiss.test.ts mobile/src/session/MobileNativeChatView.stop.test.ts mobile/src/session/MobileNativeChatView.failure-banner.test.ts mobile/src/session/MobileNativeChatView.rows.test.ts mobile/src/session/MobileNativeChatView.composer-lock.test.ts mobile/src/session/MobileNativeChatView.tail-follow.test.ts mobile/src/session/MobileNativeChatView.history-paging.test.ts mobile/src/session/mobile-prompt-controller.test.ts mobile/src/session/mobile-native-chat-permission-send.test.ts mobile/src/session/use-mobile-native-chat-cancel-ask.test.ts mobile/src/session/use-mobile-native-chat-answer-send.test.ts mobile/src/session/use-mobile-native-chat-message-send.test.ts mobile/src/session/native-chat/mobile-native-chat-send.test.ts mobile/src/session/MobileNativeChatCardHeaderAction.test.tsx mobile/src/session/MobileNativeChatPromptCard.test.tsx --maxWorkers=2"
         },
         {
           "date": "2026-10-06",
@@ -17572,8 +17646,8 @@
         "pnpm exec vitest run --config config/vitest.config.ts src/main/runtime/rpc/terminal-subscribe-buffer.test.ts src/main/runtime/rpc/terminal-output-batching.test.ts src/main/runtime/rpc/terminal-multiplex-snapshot-serialization.test.ts src/main/runtime/rpc/terminal-multiplex-ack-output-budget.test.ts src/main/runtime/rpc/terminal-multiplex-ack-overflow-recovery.test.ts src/main/runtime/rpc/terminal-multiplex-pty-wait-capacity.test.ts src/main/runtime/rpc/terminal-multiplex-output-pause-and-viewport.test.ts",
         "pnpm exec vitest run --config config/vitest.config.ts src/main/runtime/rpc/terminal-subscribe-buffer.test.ts src/main/runtime/rpc/terminal-output-batching.test.ts src/main/runtime/rpc/terminal-multiplex-snapshot-serialization.test.ts src/main/runtime/rpc/terminal-multiplex-ack-output-budget.test.ts src/main/runtime/rpc/terminal-multiplex-ack-overflow-recovery.test.ts src/main/runtime/rpc/terminal-multiplex-pty-wait-capacity.test.ts src/main/runtime/rpc/terminal-multiplex-output-pause-and-viewport.test.ts src/renderer/src/components/terminal-pane/pty-connection-hidden-replay.test.ts src/renderer/src/components/terminal-pane/remote-runtime-pty-transport-stream-reconnect.test.ts src/renderer/src/components/terminal-pane/terminal-pty-ack-gate.test.ts src/renderer/src/lib/pane-manager/terminal-delivery-credit.test.ts src/renderer/src/runtime/remote-runtime-terminal-parse-backpressure.test.ts src/renderer/src/runtime/runtime-terminal-stream.test.ts --maxWorkers=1",
         "ORCA_TERMINAL_PERF_BENCH=1 pnpm exec vitest run --config config/vitest.config.ts --disableConsoleIntercept src/main/runtime/rpc/terminal-multiplex-flow-control.bench.test.ts",
-        "pnpm --dir mobile exec vitest run --root .. mobile/src/session/mobile-native-chat-terminal-stream.test.ts",
-        "pnpm --dir mobile exec vitest run --root .. mobile/src/session/use-mobile-native-chat-terminal-stream.test.ts"
+        "pnpm --dir mobile exec vitest run --root .. mobile/src/session/native-chat/mobile-native-chat-terminal-stream.test.ts",
+        "pnpm --dir mobile exec vitest run --root .. mobile/src/session/native-chat/use-mobile-native-chat-terminal-stream.test.ts"
       ],
       "testFiles": [
         "src/main/runtime/rpc/terminal-subscribe-buffer.test.ts",
@@ -17590,8 +17664,8 @@
         "src/renderer/src/lib/pane-manager/terminal-delivery-credit.test.ts",
         "src/renderer/src/runtime/remote-runtime-terminal-parse-backpressure.test.ts",
         "src/renderer/src/runtime/runtime-terminal-stream.test.ts",
-        "mobile/src/session/mobile-native-chat-terminal-stream.test.ts",
-        "mobile/src/session/use-mobile-native-chat-terminal-stream.test.ts"
+        "mobile/src/session/native-chat/mobile-native-chat-terminal-stream.test.ts",
+        "mobile/src/session/native-chat/use-mobile-native-chat-terminal-stream.test.ts"
       ],
       "assertionRefs": [
         {
@@ -17685,7 +17759,7 @@
           ]
         },
         {
-          "file": "mobile/src/session/mobile-native-chat-terminal-stream.test.ts",
+          "file": "mobile/src/session/native-chat/mobile-native-chat-terminal-stream.test.ts",
           "assertions": [
             "an active terminal stream pauses while native chat covers its WebView",
             "the stream resumes only for the ready active terminal after chat closes",
@@ -17693,7 +17767,7 @@
           ]
         },
         {
-          "file": "mobile/src/session/use-mobile-native-chat-terminal-stream.test.ts",
+          "file": "mobile/src/session/native-chat/use-mobile-native-chat-terminal-stream.test.ts",
           "assertions": [
             "a late WebView-ready transition converts a cold-start lease-only stream back to output",
             "ordinary WebView readiness does not rerender the mobile session route"
@@ -17717,7 +17791,8 @@
           "command": "pnpm --dir mobile exec vitest run --root .. mobile/src/session/mobile-native-chat-terminal-stream.test.ts",
           "result": "passed",
           "durationSeconds": 0.2,
-          "summary": "The focused mobile native-chat suite passed with 3 terminal-stream lifecycle assertions in the staged PR #5824 worktree."
+          "summary": "The focused mobile native-chat suite passed with 3 terminal-stream lifecycle assertions in the staged PR #5824 worktree.",
+          "currentCommand": "pnpm --dir mobile exec vitest run --root .. mobile/src/session/native-chat/mobile-native-chat-terminal-stream.test.ts"
         },
         {
           "date": "2026-07-22",
@@ -20053,11 +20128,11 @@
       "invariant": "Quick Open queries execute on the worktree host, find exact ignored-path matches beyond the legacy inventory prefix, return deterministic bounded results, and keep the paired runtime usable without overflowing its outbound reply buffer.",
       "oracle": "Create 88,763 paths with 77,792 ignored entries and a nominal 22 GiB sparse file, query exact late gitignored and .orcaignored targets through headed and headless paired runtimes, and require one deterministic match, a payload below 4 KiB, and a healthy follow-up worktree call.",
       "commands": [
-        "pnpm exec vitest run --config config/vitest.config.ts src/main/ipc/filesystem-search-file-paths.test.ts src/main/runtime/orca-runtime-files-search.test.ts src/main/runtime/rpc/methods/files-path-search.test.ts src/renderer/src/components/quick-open-file-list.react.test.tsx src/renderer/src/runtime/runtime-file-client-search-listing.test.ts src/shared/quick-open-transport-budget.test.ts --reporter=dot",
+        "pnpm exec vitest run --config config/vitest.config.ts src/main/ipc/filesystem/filesystem-search-file-paths.test.ts src/main/runtime/orca-runtime-files-search.test.ts src/main/runtime/rpc/methods/files-path-search.test.ts src/renderer/src/components/quick-open-file-list.react.test.tsx src/renderer/src/runtime/runtime-file-client-search-listing.test.ts src/shared/quick-open-transport-budget.test.ts --reporter=dot",
         "pnpm exec playwright test tests/e2e/paired-quick-open-large-tree.spec.ts --config tests/playwright.config.ts --workers=1"
       ],
       "testFiles": [
-        "src/main/ipc/filesystem-search-file-paths.test.ts",
+        "src/main/ipc/filesystem/filesystem-search-file-paths.test.ts",
         "src/main/runtime/orca-runtime-files-search.test.ts",
         "src/main/runtime/rpc/methods/files-path-search.test.ts",
         "src/renderer/src/components/quick-open-file-list.react.test.tsx",
@@ -20067,7 +20142,7 @@
       ],
       "assertionRefs": [
         {
-          "file": "src/main/ipc/filesystem-search-file-paths.test.ts",
+          "file": "src/main/ipc/filesystem/filesystem-search-file-paths.test.ts",
           "assertions": [
             "host search stays bounded and respects gitignore plus .orcaignore traversal"
           ]
@@ -20087,7 +20162,7 @@
           "runner": "local",
           "platform": "macos",
           "result": "passed",
-          "command": "pnpm exec vitest run --config config/vitest.config.ts src/main/ipc/filesystem-search-file-paths.test.ts src/main/runtime/orca-runtime-files-search.test.ts src/main/runtime/rpc/methods/files-path-search.test.ts src/renderer/src/components/quick-open-file-list.react.test.tsx src/renderer/src/runtime/runtime-file-client-search-listing.test.ts src/shared/quick-open-transport-budget.test.ts --reporter=dot",
+          "command": "pnpm exec vitest run --config config/vitest.config.ts src/main/ipc/filesystem/filesystem-search-file-paths.test.ts src/main/runtime/orca-runtime-files-search.test.ts src/main/runtime/rpc/methods/files-path-search.test.ts src/renderer/src/components/quick-open-file-list.react.test.tsx src/renderer/src/runtime/runtime-file-client-search-listing.test.ts src/shared/quick-open-transport-budget.test.ts --reporter=dot",
           "durationSeconds": 5,
           "summary": "Six focused files passed 52 tests across host search, runtime RPC, renderer query ownership, and transport bounds; existing React act warnings remained non-fatal."
         }

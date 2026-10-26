@@ -79,8 +79,7 @@ export class StructuredAgentSessionEventRecovery {
         runtimeState,
         acknowledgeRelease: (sessionId) => deps.adapter.acknowledgeSessionRelease?.(sessionId)
       },
-      abortOpen: (sessionId) =>
-        runtimeState.acquireAborts.abort(sessionId, 'provider exited while opening')
+      abortBound: (sessionId) => runtimeState.acquireAborts.abortBound(sessionId)
     }
   }
 

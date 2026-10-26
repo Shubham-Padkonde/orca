@@ -1,3 +1,4 @@
+import * as autoSandbox from '../../codex/codex-structured-auto-sandbox'
 import { expect, it, vi } from 'vitest'
 import { codexInputFinalizationFixture } from './structured-agent-session-codex-input-host.test'
 import {
@@ -229,6 +230,127 @@ it.each(CODEX_INPUT_FINALIZATION_ADMISSION_CASES)(
       await stopping
       await fixture.waitForInputFinalization(journal, id)
       await measured?.()
+    }
+  }
+)
+
+it.each(['stop', 'exit', 'exit-after-close-record'] as const)(
+  'unwinds actual Auto preparation on %s without a late write',
+  async (ending) => {
+    const { host, adapter, codex, config, pick, permissionSend, stop, starts } =
+      codexInputFinalizationFixture()
+    const exiting = ending !== 'stop'
+    Object.defineProperty(process, 'platform', { configurable: true, value: 'linux' })
+    await pick('auto')
+    const paused = Promise.withResolvers<unknown>()
+    let signal: AbortSignal | undefined
+    const lateReads: Promise<unknown>[] = []
+    const readAuto = autoSandbox.readCodexAutoSandbox
+    vi.spyOn(autoSandbox, 'readCodexAutoSandbox').mockImplementation((...args) => {
+      const task = readAuto(...args)
+      lateReads.push(task)
+      return task
+    })
+    let preparing = false
+    let frameEnded = false
+    const dispatch = adapter.dispatch.bind(adapter)
+    vi.spyOn(adapter, 'dispatch').mockImplementation(async (input) => {
+      signal = input.signal
+      codex.routes['config/read'] = (params) => {
+        if (!params?.cwd) {
+          return config
+        }
+        preparing = true
+        return paused.promise
+      }
+      try {
+        return await dispatch(input)
+      } finally {
+        frameEnded = true
+      }
+    })
+    const id = await permissionSend('keep exact Auto')
+    const journal = host['sessions'].get(SESSION)!.journal
+    try {
+      await vi.waitFor(() => expect(preparing).toBe(true))
+      const session = adapter['sessions'].get(SESSION)!
+      const permissions = session.permissions!
+      const before = { ...permissions }
+      const options = [...session.options]
+      const waiting = host.waitForSendSettlement(SESSION, id)
+      let answeredEarly = false
+      void waiting.then(() => {
+        answeredEarly = true
+      })
+      const resolve = journal.resolveDispatch.bind(journal)
+      const written = vi
+        .spyOn(journal, 'resolveDispatch')
+        .mockImplementation((resolution, ...rest) => {
+          if (resolution.state === 'rejected') {
+            expect(answeredEarly).toBe(false)
+            expect(resolution).toMatchObject({
+              clientMessageId: id,
+              fence: 1,
+              rejection: { kind: exiting ? 'providerExited' : 'cancelled' }
+            })
+            expect(resolution.rejection).toEqual(
+              exiting ? { kind: 'providerExited', neverReachedAgent: true } : { kind: 'cancelled' }
+            )
+            expect(resolution.reason).toMatch(/before/)
+            if (exiting) {
+              expect(host['sessions'].get(SESSION)?.lastEndedChild?.failure?.detail).toEqual({
+                text: 'Codex exited',
+                audience: 'log'
+              })
+            }
+          }
+          return resolve(resolution, ...rest)
+        })
+      expect(signal?.aborted).toBe(false)
+      expect(finalizingStructuredAgentSessionInput(journal, id)).toBe(true)
+      if (ending === 'exit-after-close-record') {
+        const { sessions, serialize, lifetime } = host.collaboratorsForTests()
+        const child = sessions.get(SESSION)!.child!
+        vi.spyOn(adapter, 'disposeSession').mockResolvedValue(false)
+        await expect(
+          serialize(SESSION, () => lifetime.stopAgent(SESSION, { cause: 'evict' }))
+        ).rejects.toThrow()
+        expect(sessions.get(SESSION)?.child).toBe(child)
+        expect(child.close).toMatchObject({ cause: 'evict' })
+        expect(signal?.aborted).toBe(false)
+      }
+      if (ending === 'stop') {
+        await stop()
+      } else {
+        codex.connections[0]?.handlers.onExit?.(
+          Object.assign(new Error('Codex exited'), {
+            providerDiagnostic: { text: 'Codex exited', audience: 'log' }
+          }),
+          { expected: false }
+        )
+      }
+      await vi.waitFor(() => expect(signal?.aborted && frameEnded).toBe(true))
+      const answered = codexInputFinalizationFixture().submission((await waiting)?.value)
+      expect(answered).toMatchObject({
+        dispatchState: 'rejected',
+        fence: 1,
+        rejection: { kind: exiting ? 'providerExited' : 'cancelled' }
+      })
+      expect(answered).toEqual(journal.submission(id))
+      expect(starts()).toHaveLength(0)
+      paused.resolve(config)
+      await Promise.allSettled(lateReads)
+      await codexInputFinalizationFixture().waitForInputFinalization(journal, id)
+      expect(session.permissions).toBe(permissions)
+      expect(permissions).toEqual(before)
+      expect([...session.options]).toEqual(options)
+      expect(starts()).toHaveLength(0)
+      const writes = await Promise.allSettled(written.mock.results.map((result) => result.value))
+      expect(writes.filter((result) => result.status === 'rejected')).toEqual([])
+    } finally {
+      paused.resolve(config)
+      await Promise.allSettled(lateReads)
+      await codexInputFinalizationFixture().waitForInputFinalization(journal, id)
     }
   }
 )

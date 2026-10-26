@@ -42,7 +42,8 @@ export type StructuredAgentSessionPendingHandover = {
 export async function beginSubmissionHandover(
   ctx: AgentSessionHandoverContext,
   submission: AgentJournalSubmission,
-  stillCurrent: () => boolean
+  stillCurrent: () => boolean,
+  isBound: () => boolean
 ): Promise<StructuredAgentSessionPendingHandover | null> {
   const { clientMessageId } = submission
   const body = ctx.journal.itemBody(agentJournalSubmissionKey(clientMessageId))
@@ -82,7 +83,7 @@ export async function beginSubmissionHandover(
       }
     }
   )
-  const attempt = ctx.acquireAborts?.begin(ctx.sessionId, true)
+  const attempt = ctx.acquireAborts?.begin(ctx.sessionId, true, false, isBound)
   const queued = submission.queuedMessageId !== undefined
   try {
     await ctx.journal.resolveDispatch({

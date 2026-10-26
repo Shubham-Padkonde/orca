@@ -46,8 +46,8 @@ export function beginStructuredAgentSessionInputHandover(
     session.journal
       .submissions()
       .some((s) => s.clientMessageId === next.clientMessageId && s.dispatchState === 'pending')
-  const isCurrent = () =>
-    deps.sessions.get(sessionId) === session && session.child === binding && !binding.close
+  const isBound = () => deps.sessions.get(sessionId) === session && session.child === binding
+  const isCurrent = () => isBound() && !binding.close
   const validate = (signal?: AbortSignal) => {
     const work = deps.currentWork(sessionId)
     if (
@@ -171,12 +171,6 @@ export function beginStructuredAgentSessionInputHandover(
             )
           }
           const child = deps.sessions.get(sessionId)?.child
-          if (child) {
-            await waitForPromiseWithSignal<unknown>(
-              deps.readiness(sessionId, child)?.wait() ?? Promise.resolve(),
-              signal
-            )
-          }
           const rebound = await waitForPromiseWithSignal(
             deps.serialize(sessionId, async () => {
               signal?.throwIfAborted()
@@ -261,6 +255,7 @@ export function beginStructuredAgentSessionInputHandover(
     },
     next,
     // Re-read right before the provider call, which runs outside the serialize.
-    isCurrent
+    isCurrent,
+    isBound
   )
 }

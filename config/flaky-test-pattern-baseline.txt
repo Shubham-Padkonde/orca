@@ -267,8 +267,7 @@
 1 test-no-real-time-wait:src/main/gitlab/work-item-details.test.ts
 1 test-no-real-time-wait:src/main/grok/grok-hook-stdin-no-eof.test.ts
 1 test-no-real-time-wait:src/main/ipc/created-worktree-reconciliation.test.ts
-1 test-no-real-time-wait:src/main/ipc/filesystem-auth.test.ts
-1 test-no-real-time-wait:src/main/ipc/filesystem/filesystem-content-search-cancellation.test.ts
+1 test-no-real-time-wait:src/main/ipc/filesystem/filesystem-auth.test.ts
 5 test-no-real-time-wait:src/main/ipc/filesystem/local-disk-write-precondition.test.ts
 2 test-no-real-time-wait:src/main/ipc/folder-repo-git-upgrade.test.ts
 2 test-no-real-time-wait:src/main/ipc/native-chat.test.ts
@@ -429,7 +428,6 @@
 1 test-no-real-time-wait:src/renderer/src/components/dashboard-popout/useDashboardSnapshot.test.tsx
 1 test-no-real-time-wait:src/renderer/src/components/editor/combined-diff/load-sections/combined-diff-stale-analysis-work-budget.test.tsx
 1 test-no-real-time-wait:src/renderer/src/components/editor/DiagramViewerModal.test.tsx
-2 test-no-real-time-wait:src/renderer/src/components/mobile/MobilePage.test.tsx
 1 test-no-real-time-wait:src/renderer/src/components/native-chat/native-chat-composer-draft-lifecycle.test.tsx
 6 test-no-real-time-wait:src/renderer/src/components/native-chat/native-chat-composer-draft-store.test.ts
 1 test-no-real-time-wait:src/renderer/src/components/native-chat/NativeChatModelCombobox.test.tsx
@@ -482,7 +480,6 @@
 1 test-no-real-time-wait:src/shared/darwin-terminal-names.test.ts
 5 test-no-real-time-wait:src/shared/fish-query-reply-child-stdin.node-pty.test.ts
 1 test-no-real-time-wait:src/shared/git-branch-line-total-soft-deadline.test.ts
-2 test-no-real-time-wait:src/shared/git-fetch-head-lock.test.ts
 1 test-no-real-time-wait:src/shared/osc52-clipboard.test.ts
 1 test-no-real-time-wait:src/shared/priority-semaphore.test.ts
 4 test-no-real-time-wait:src/shared/pty-reply-echo-shapes.node-pty.test.ts
@@ -701,7 +698,7 @@
 1 test-no-wall-clock:mobile/src/components/MobileHostCard-truthful-status.test.tsx
 1 test-no-wall-clock:mobile/src/components/MobileHostCard.test.ts
 1 test-no-wall-clock:mobile/src/components/pr-sidebar/pr-comment-card-web-avatar.test.tsx
-1 test-no-wall-clock:mobile/src/session/mobile-native-chat-pending-echo.test.ts
+1 test-no-wall-clock:mobile/src/session/native-chat/mobile-native-chat-pending-echo.test.ts
 1 test-no-wall-clock:mobile/src/session/mobile-structured-send-new-action.test.ts
 2 test-no-wall-clock:mobile/src/session/use-mobile-native-chat-message-send-draft-lifetime.test.ts
 1 test-no-wall-clock:mobile/src/session/use-mobile-native-chat-message-send.test.ts

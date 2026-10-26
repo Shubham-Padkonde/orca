@@ -241,6 +241,9 @@ async function runAttachUnderAbort(
       },
       ...(options.startupOptions ? { startupOptions: options.startupOptions } : {}),
       launchPermissionMode: structuredAgentSessionAttachPermission(context, options, lock),
+      assertNoTerminalWriter: async (record) => {
+        await lock.wait(Promise.resolve(context.deps.assertNoTerminalWriter?.(record)))
+      },
       ...(options.onAcquisitionFailed ? { onAcquisitionFailed: options.onAcquisitionFailed } : {}),
       openConversation: async (record) => {
         const conversation = await context.openConversation(record.sessionId, { acquisition: true })
