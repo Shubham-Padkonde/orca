@@ -1,0 +1,52 @@
+name: Runtime teams launcher validation
+on:
+  push:
+    branches: [validate/runtime-agent-teams]
+permissions:
+  contents: read
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      ORCA_BACKGROUND_LAUNCH: '1'
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: ./.github/actions/setup-pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Launcher and launch-selection regressions
+        run: |
+          set -o pipefail
+          pnpm test src/main/orcad/orcad-cli-launcher.test.ts src/main/cli/orca-cli-child-path.test.ts src/main/runtime/runtime-worktree-agent-startup.test.ts src/shared/agent-launch-remote.test.ts --maxWorkers=2 2>&1 | tee fixed.log
+      - name: Prove the regressions fail on the original launcher
+        shell: bash
+        run: |
+          cp src/main/orcad/orcad-cli-launcher.ts "$RUNNER_TEMP/fixed-launcher.ts"
+          git show fc640dc2^:src/main/orcad/orcad-cli-launcher.ts > src/main/orcad/orcad-cli-launcher.ts
+          set +e
+          pnpm test src/main/orcad/orcad-cli-launcher.test.ts --maxWorkers=2 > baseline.log 2>&1
+          result=$?
+          set -e
+          cp "$RUNNER_TEMP/fixed-launcher.ts" src/main/orcad/orcad-cli-launcher.ts
+          cat baseline.log
+          test "$result" -ne 0
+          grep -q 'orca-ide' baseline.log
+          grep -q 'ENOENT' baseline.log
+      - name: Required changed-file checks
+        run: |
+          set -o pipefail
+          pnpm check:changed --maxWorkers=2 2>&1 | tee changed-checks.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: runtime-teams-validation
+          path: |
+            fixed.log
+            baseline.log
+            changed-checks.log
