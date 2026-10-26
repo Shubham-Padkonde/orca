@@ -247,6 +247,22 @@ describe('connectPanePty pre-connect input', () => {
     binding.dispose()
   })
 
+  it('keeps a brand-new pane’s typing for the terminal it creates, but not a restored pane’s', async () => {
+    transportFactoryQueue.push(createMockTransport(), createMockTransport())
+    mockStoreState.terminalLayoutsByTabId = {}
+
+    const fresh = connectPlainPane()
+    const restored = connectPlainPane({
+      restoredLeafId: leafIdForPane(1),
+      restoredPtyIdByLeafId: { [leafIdForPane(1)]: 'remote:env-1@@terminal-1' }
+    })
+
+    expect(createdTransportOptions[0]?.keepTypeAheadForNewTerminal).toBe(true)
+    expect(createdTransportOptions[1]?.keepTypeAheadForNewTerminal).toBeUndefined()
+    fresh.dispose()
+    restored.dispose()
+  })
+
   it('drops keys typed into a deliberately slept pane instead of replaying them on wake', async () => {
     markWorktreeSleepIntent('wt-1')
     const transport = Object.assign(createMockTransport(), { abandonPreconnectInput: vi.fn() })

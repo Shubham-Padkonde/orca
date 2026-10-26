@@ -35,6 +35,15 @@ function holdsInputUntilConnect(session: ConnectPanePtySession): boolean {
   return !paneHasStartupWork(session)
 }
 
+/** Whether this pane's leaf already names a terminal, so its screen may show an old one. */
+function paneHasBoundTerminal(session: ConnectPanePtySession): boolean {
+  const state = useAppStore.getState()
+  return Boolean(
+    session.restoredPtyIdForTransport ||
+    state.terminalLayoutsByTabId[session.deps.tabId]?.ptyIdsByLeafId?.[session.pane.leafId]
+  )
+}
+
 export function buildPaneTransportOptions(session: ConnectPanePtySession): IpcPtyTransportOptions {
   const holdsInput = holdsInputUntilConnect(session)
   return {
@@ -48,6 +57,8 @@ export function buildPaneTransportOptions(session: ConnectPanePtySession): IpcPt
           releasePreconnectInput: () => holdsInputUntilConnect(session)
         }
       : {}),
+    // Why only with no restored terminal: typing on old pixels must never reach a fresh shell (#10065).
+    ...(holdsInput && !paneHasBoundTerminal(session) ? { keepTypeAheadForNewTerminal: true } : {}),
     // Why gated: a seed alone arms the transport hold, which would flush ahead of startup work.
     ...(holdsInput && session.deps.preconnectInput?.length
       ? { preconnectInput: session.deps.preconnectInput }

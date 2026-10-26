@@ -55,7 +55,7 @@ async function completeAttach(): Promise<void> {
 }
 
 /** Holds `terminal.create` open until the spec settles it with the handle the host returns. */
-async function createGatedTransport() {
+async function createGatedTransport(options: Record<string, unknown> = {}) {
   const created = createDeferred<string | Error>()
   // Acknowledged writes to a host without input acks go out as `terminal.send` calls.
   const acceptedSends: string[] = []
@@ -77,7 +77,7 @@ async function createGatedTransport() {
     }
   )
   const { createRemoteRuntimePtyTransport } = await import('./remote-runtime-pty-transport')
-  const transport = createRemoteRuntimePtyTransport('env-1', { worktreeId: 'wt-1' })
+  const transport = createRemoteRuntimePtyTransport('env-1', { worktreeId: 'wt-1', ...options })
   const waitForCreate = () =>
     vi.waitFor(() => {
       expect(runtimeCall).toHaveBeenCalledWith(
@@ -235,4 +235,54 @@ describe('remote reattach type-ahead', () => {
       transport.destroy?.()
     }
   )
+
+  describe('a brand-new pane', () => {
+    it('delivers typing from before and during its first create to the terminal it makes', async () => {
+      const { transport, created, waitForCreate } = await createGatedTransport({
+        keepTypeAheadForNewTerminal: true
+      })
+      expect(transport.sendInput('ec', 'driving')).toBe(true)
+      const connecting = transport.connect({ url: '', callbacks: {} })
+      await waitForCreate()
+      expect(transport.sendInput('ho hi\r', 'driving')).toBe(true)
+      expect(inputFrameTexts()).toEqual([])
+      created.resolve('terminal-new')
+      await connecting
+      await completeAttach()
+      await vi.waitFor(() => expect(inputFrameTexts().join('')).toBe('echo hi\r'))
+      transport.destroy?.()
+    })
+
+    it('drops its typing when startup work appeared before the terminal bound', async () => {
+      const { transport, created, waitForCreate } = await createGatedTransport({
+        keepTypeAheadForNewTerminal: true,
+        releasePreconnectInput: () => false
+      })
+      expect(transport.sendInput('make the tests pass\r', 'driving')).toBe(true)
+      const connecting = transport.connect({ url: '', callbacks: {} })
+      await waitForCreate()
+      created.resolve('terminal-new')
+      await connecting
+      await completeAttach()
+      expect(transport.sendInput('live', 'driving')).toBe(true)
+      await vi.waitFor(() => expect(inputFrameTexts().join('')).toMatch(/live$/))
+      expect(inputFrameTexts().join('')).toBe('live')
+      transport.destroy?.()
+    })
+
+    it('drops its typing when the first create binds no terminal', async () => {
+      const { transport, created, waitForCreate } = await createGatedTransport({
+        keepTypeAheadForNewTerminal: true
+      })
+      const accepted = transport.sendInputAccepted?.('lost\r', 'driving')
+      const connecting = transport.connect({ url: '', callbacks: {} })
+      await waitForCreate()
+      created.resolve(new Error('offline'))
+      await connecting
+      await expect(accepted).resolves.toBe(false)
+      await flushAsyncTicks()
+      expect(inputFrameTexts()).toEqual([])
+      transport.destroy?.()
+    })
+  })
 })
