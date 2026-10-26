@@ -1,5 +1,4 @@
 import { recognizeAgentProcess } from '../../shared/agent-process-recognition'
-import { isShellProcess } from '../../shared/shell-process-detection'
 import type { TerminalAgent } from '../../shared/terminal-agent'
 import { withTimeoutResult } from './runtime-async-boundaries'
 import { TERMINAL_INTERACTIVE_WAIT_PROBE_TIMEOUT_MS } from './orca-runtime-core'
@@ -17,6 +16,9 @@ type Dependencies = {
   touchSnapshot(ptyId: string): void
   finishDelayedSnapshot(ptyId: string, changed: boolean): void
 }
+
+// Windows native Claude is claude.exe (recognized by name), and confirm there forces a full scan.
+const NATIVE_CLAUDE_VERSION_NAME = /^\d+\.\d+\.\d+/
 
 export class RuntimePtyForegroundAgent {
   private readonly refreshes = new Map<string, PtyForegroundAgentRefresh>()
@@ -99,7 +101,7 @@ export class RuntimePtyForegroundAgent {
     return entry.promise
   }
 
-  /** Null when launch, foreground, or command evidence already owns the pane; false when the scan timed out. */
+  /** Null when launch, foreground, or command evidence already owns the pane; false when the read or scan timed out. */
   identifyUnowned(ptyId: string): Promise<boolean> | null {
     const pty = this.deps.getPty(ptyId)
     if (!pty || (pty.launchAgent ?? pty.foregroundAgent ?? pty.launchCommandAgent)) {
@@ -142,7 +144,7 @@ export class RuntimePtyForegroundAgent {
   private async load(
     ptyId: string,
     afterTitle: number,
-    confirmUnfamiliar = false
+    confirmVersionNamed = false
   ): Promise<boolean> {
     const controller = this.deps.getController()
     const pty = this.deps.getPty(ptyId)
@@ -155,17 +157,21 @@ export class RuntimePtyForegroundAgent {
     }
     const foregroundName = result.process
     let agent = recognizeAgentProcess(foregroundName)?.agent ?? null
-    // Native Claude's p_comm is its version (2.1.310); only a process-table scan reads its argv.
-    if (!agent && foregroundName && !isShellProcess(foregroundName)) {
+    // Native Claude's p_comm is its versions/<semver> binary; only a process-table scan reads its argv.
+    if (!agent && foregroundName && NATIVE_CLAUDE_VERSION_NAME.test(foregroundName)) {
       const confirmed = this.confirmedByPtyId.get(ptyId)
       if (confirmed?.foregroundName === foregroundName) {
         agent = confirmed.agent
-      } else if (confirmUnfamiliar) {
-        agent = recognizeAgentProcess(await this.confirm(result.controller, ptyId))?.agent ?? null
+      } else if (confirmVersionNamed && process.platform !== 'win32') {
+        const confirmedName = await this.confirm(result.controller, ptyId)
         if (result.controller !== this.deps.getController()) {
           return false
         }
-        this.confirmedByPtyId.set(ptyId, { foregroundName, agent })
+        agent = recognizeAgentProcess(confirmedName)?.agent ?? null
+        // A failed or unavailable scan proves nothing, so only an answered scan is kept.
+        if (confirmedName !== null) {
+          this.confirmedByPtyId.set(ptyId, { foregroundName, agent })
+        }
       }
     } else {
       this.confirmedByPtyId.delete(ptyId)

@@ -1,3 +1,4 @@
+import { detectTerminalWaitBlockedReason } from '../../terminal-wait-detection'
 import {
   OrcaRuntimeWithResolveAuthoritativeTerminalWaitPermission,
   type TerminalInteractiveWaitEvidence
@@ -9,8 +10,13 @@ export abstract class OrcaRuntimeWithTitlelessPaneAgentIdentity extends OrcaRunt
     handle: string,
     ptyId: string
   ): TerminalInteractiveWaitEvidence | Promise<TerminalInteractiveWaitEvidence | undefined> {
+    const { terminal } = this.getTerminalWaitPermissionInputs(handle, ptyId)
+    // Only dialog-shaped output earns a foreground read; plain shells and editors answer synchronously.
     const identity =
-      this.getTerminalWaitPermissionInputs(handle, ptyId).terminal.titleStatus === null &&
+      terminal.titleStatus === null &&
+      detectTerminalWaitBlockedReason(
+        this.readLiveTerminalScreenLines(ptyId)?.join('\n') ?? terminal.waitText
+      ) !== null &&
       this.ptyForegroundAgent.identifyUnowned(ptyId)
     if (!identity) {
       return super.readTerminalInteractiveWaitEvidence(handle, ptyId)
