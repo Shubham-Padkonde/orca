@@ -13,6 +13,7 @@ import { AgentSessionPreSpawnError } from '../../../native-chat/agent-session-wi
 import { CodexAppServerRequestError } from '../../../codex/app-server/codex-app-server-request-error'
 import { executeAgentLaunch } from '../../../agent-launch/agent-launch-executor'
 import { agentLaunchSurfaceFactory } from './agent-launch-surfaces'
+import * as structuredCreate from './structured-agent-session-create'
 import {
   methodNamed,
   rpcContext,
@@ -273,6 +274,55 @@ it('replays a lost reply for a prompted folder launch without another message or
     serviceTier: 'fast'
   })
   expect((await rig.host.journalSnapshot(SESSION)).submissions).toHaveLength(1)
+})
+
+it.each([true, false])(
+  'keeps an explicit Claude Fast %s over the opposite saved selection',
+  async (fastMode) => {
+    const runtime = launchRuntime()
+    const resolve = runtime.resolveStructuredAgentSessionCreateIntent.getMockImplementation()!
+    runtime.resolveStructuredAgentSessionCreateIntent.mockImplementation(async (params) => ({
+      ...(await resolve(params)),
+      provider: 'claude',
+      agent: 'claude',
+      accountHome: { variable: 'CLAUDE_CONFIG_DIR', path: '/host/.claude' },
+      options: { model: 'claude-opus-4-6', effort: 'medium', fastMode: String(!fastMode) }
+    }))
+    const created = await agentLaunchSurfaceFactory(
+      rpcContext(runtime, PHONE)
+    ).createStructuredSession({
+      worktreeId: 'wt-7',
+      agent: 'claude',
+      withoutPrompt: true,
+      options: { model: 'claude-opus-4-6', fastMode }
+    })
+    expect(rig.store.getRecord(created.sessionId)?.options).toEqual({
+      model: 'claude-opus-4-6',
+      effort: 'medium',
+      fastMode: String(fastMode)
+    })
+    expect(rig.adapter.acquire).not.toHaveBeenCalled()
+  }
+)
+
+it('omits unsupported-only Codex Fast overrides and retains saved defaults', async () => {
+  const runtime = launchRuntime()
+  const create = vi.spyOn(structuredCreate, 'createStructuredAgentSessionForWorktree')
+  const created = await agentLaunchSurfaceFactory(
+    rpcContext(runtime, PHONE)
+  ).createStructuredSession({
+    worktreeId: 'wt-7',
+    agent: 'codex',
+    withoutPrompt: true,
+    options: { fastMode: true }
+  })
+  expect(create.mock.calls[0]?.[0]).not.toHaveProperty('options')
+  expect(rig.store.getRecord(created.sessionId)?.options).toEqual({
+    model: 'gpt-5.6-sol',
+    effort: 'medium'
+  })
+  expect(rig.adapter.acquire).not.toHaveBeenCalled()
+  create.mockRestore()
 })
 
 it.each(['before', 'after'] as const)(

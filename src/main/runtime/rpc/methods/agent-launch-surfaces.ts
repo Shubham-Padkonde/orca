@@ -65,7 +65,7 @@ export function agentLaunchSurfaceFactory(
           definition?.restingOptions.acceptsKey(key)
         )
       )
-      const seeded = narrowStructuredLaunchSeedOptions(supported)
+      const seeded = Object.keys(supported).length > 0 ? supported : undefined
       // A client that creates chats without starting them starts this one on its first message.
       const atRest =
         firstMessage !== undefined ||
