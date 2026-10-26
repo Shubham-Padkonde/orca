@@ -183,7 +183,10 @@ it('reaches and edits/removes a reloaded handoff row through B Settings and conc
     )
     expect(remove).toBeTruthy()
     await act(async () => remove?.dispatchEvent(new MouseEvent('click', { bubbles: true })))
-    expect(deleteHostSetup).toHaveBeenCalledExactlyOnceWith({ setupId: 'pending-b' })
+    expect(deleteHostSetup).toHaveBeenCalledExactlyOnceWith({
+      setupId: 'pending-b',
+      hostId: pending.hostId
+    })
     expect(
       useAppStore.getState().endpointProjectHostSetups.some((setup) => setup.id === 'pending-b')
     ).toBe(false)
