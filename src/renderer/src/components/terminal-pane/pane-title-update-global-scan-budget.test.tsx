@@ -335,6 +335,7 @@ afterEach(() => {
   container?.remove()
   container = null
   useAppStore.setState(originalState, true)
+  vi.restoreAllMocks()
 })
 
 describe('one pane title update at live-capture scale', () => {
@@ -535,6 +536,8 @@ describe.each<ChatStatusConsumer>(['sidebar', 'parent picker', 'palette'])(
     )
 
     it('observes chat evidence live while preserving agent priority', () => {
+      const now = 1_000
+      vi.spyOn(Date, 'now').mockReturnValue(now)
       mountChatConsumers(consumer, 1, 1)
       expect(chatStatusLabels()).toEqual(['inactive'])
       const tab = useAppStore.getState().unifiedTabsByWorktree[TARGET_WORKTREE_ID][0]
@@ -550,8 +553,8 @@ describe.each<ChatStatusConsumer>(['sidebar', 'parent picker', 'palette'])(
         worktreeId: TARGET_WORKTREE_ID,
         state: 'working',
         prompt: '',
-        updatedAt: Date.now(),
-        stateStartedAt: Date.now(),
+        updatedAt: now,
+        stateStartedAt: now,
         stateHistory: []
       }
       act(() =>
