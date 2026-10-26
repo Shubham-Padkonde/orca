@@ -1,4 +1,5 @@
 import type * as pty from 'node-pty'
+import { ptyShellProcessId } from '../../windows/windows-pty-job'
 import * as foreground from '../../providers/pty-foreground-confirmation'
 import { getAgentForegroundContextPaths } from '../../providers/agent-foreground-context-paths'
 import { confirmPtyShellForeground } from './pty-shell-foreground-confirmation'
@@ -276,15 +277,14 @@ export function createPtyForegroundProcessTracker(args: {
         if (!foreground.shouldConfirmPtyForeground(fallbackProcess, decision)) {
           return fallbackProcess
         }
-        const { resolution, processName: decisionName } =
-          await foreground.confirmFreshPtyForeground({
-            process: proc,
-            fallbackProcess,
-            contextPaths,
-            decision,
-            anchor,
-            anchorAt: anchor?.refreshedAt
-          })
+        const { resolution, processName: name } = await foreground.confirmFreshPtyForeground({
+          process: proc,
+          fallbackProcess,
+          contextPaths,
+          decision,
+          anchor,
+          anchorAt: anchor?.refreshedAt
+        })
         if (args.isDead()) {
           return null
         }
@@ -292,9 +292,7 @@ export function createPtyForegroundProcessTracker(args: {
           return null
         }
         const recognized = recognizeAgentProcess(resolution.processName)
-        const processName = decision
-          ? decisionName
-          : (recognized?.processName ?? resolution.processName)
+        const processName = decision ? name : (recognized?.processName ?? resolution.processName)
         const cacheName = decision ? (recognized?.processName ?? null) : processName
         if (
           resolution.available &&
