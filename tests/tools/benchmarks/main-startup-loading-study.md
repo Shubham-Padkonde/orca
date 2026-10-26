@@ -50,15 +50,28 @@ The main-file count reflects bundler partitioning, not enabled services. Fewer d
 
 ## Runtime and contract checks
 
-- Both Linux builds passed. Final changed-code gates: PENDING (recommended and RPC-inclusive trees).
+- Both Linux builds passed. The complete recommended `check:changed --maxWorkers=2` gate passed 23 of 24 checks: 2,119 test files passed, 3 failed and 16 were skipped; 22,643 tests passed, 3 failed, 8 were expected failures and 117 were skipped. The same three daemon initialization cases also fail in a separate full-context control at the pinned upstream base. Details follow below; the complete gate remains failing.
 - M1: 18 quit/fence tests, 77 existing owner tests, and 7 independent rereview tests passed; Node typecheck and commit checks passed.
 - M2: 290 focused tests passed across registration, first use/retry, partial initialization, shutdown, managed-target and forward restoration, auth, reconnect, cancellation, RPC/prechecks and linking. Node typecheck and relevant ratchets passed.
-- M3: catalog verification, Node typecheck, cold-bundle zero-implementation enumeration, 70-group metadata parity, compile switches, stream cancellation, serve/remote and CLI/mobile tests passed. Initial broad-run failures were corrected (subscription readiness assumptions and missing local `lsof`); all failing files passed their controlled rerun. An individual 21-check gate passed before a final test-only import relocation; the final combined gate owns committed-tree coverage.
+- M3: catalog verification, Node typecheck, cold-bundle zero-implementation enumeration, 70-group metadata parity, compile switches, stream cancellation, serve/remote and CLI/mobile tests passed. An individual 21-check gate passed before a final test-only import relocation. The later RPC-inclusive combined gate passed 23 of 24 checks; its unit failures exposed five incomplete runtime/SSH test mocks. After correcting those mocks in M1/M2, all eight initially failing files (122 tests) passed together on both candidates. There is no claim that the full RPC-inclusive gate passed after those corrections.
 - M4/M5: existing history tests and real-emulator/load-failure controls passed; 452 YAML/Hermes/update/model tests passed (one skipped).
 - M6: telemetry suites and nine transport startup/consent/queue/retry/shutdown tests passed. Independent review found no remaining blocker after the history fallback fix.
 - Actual recommended and RPC-inclusive fresh renderer IPC: SSH2 files `0 → 21` on first `testConnection`. A synthetic refused endpoint returns `ECONNREFUSED`; a separate loopback SSH2 server authenticates and returns `status: connected`, then the probe disconnects. This proves transport loading and handshake, not real managed-server deployment, SFTP, live forwarding or production auto-reconnect.
-- Actual local runtime socket (both builds): `host.platform` and `status.get` return successful replies through lazy RPC dispatch.
+- Actual local runtime socket (both builds): `host.platform` and `status.get` return successful replies through each build's registered RPC surface.
 - Playwright CDP rendered check: initial desktop and SSH settings/add-host/test flow render successfully; the connection-refused toast is visible. All app windows remain hidden on an isolated display. No UI layout/style changed.
+- Benchmark failure controls: launch rejection removes the isolated profile; process-enumeration failure still closes the owned app and removes its profile. Both controls expose the original cleanup leaks and pass against the final harness.
+
+### Broad-suite baseline failures
+
+Repeated recommended gates fail the first case in each of these unchanged test files:
+
+- `daemon-init-provider-installation.test.ts` (Node runtime): rebind listeners after installing the first provider.
+- `daemon-init-child-startup-failure.test.ts` (Bun): reject a child with changed endpoint identity.
+- `daemon-init-severed-host-image.test.ts` (Bun): quarantine a busy daemon whose AppImage files are gone.
+
+The failures call real `mkdirSync` under `/fake` or `/fake/userData/daemon` despite the fixture's filesystem mock and report `EACCES`. A separate broad `vitest related` control at base `15a1ff75fc5db5caff151b8b90ed50700ef262ac`, with the candidate's source-input list and two workers, reproduces the same three cases. Focused runs pass, including all 31 tests in these three files with the full source-input list and explicitly restricted project includes. This establishes that the observed failures predate this refactor; the broad-context mock interaction is not diagnosed or repaired here.
+
+Final production source is identical to the measured recommended revision. Subsequent changes correct the five runtime/SSH test mocks, harden benchmark cleanup and document results. Draft CI skips the heavy checks; local validation does not establish packaged or native Windows/macOS readiness.
 
 ## Remaining eager graph and follow-up design
 
