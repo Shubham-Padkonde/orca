@@ -471,19 +471,20 @@ function mountChatConsumers(
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
-  const content = consumer === 'parent picker' ? (
-    <ChatParentPickerProbe ids={ids} />
-  ) : consumer === 'sidebar' ? (
-    ids.map((id) => <ChatSidebarProbe key={id} worktreeId={id} />)
-  ) : (
-    <PaletteLiveStatusProvider active>
-      {ids.map((id) => (
-        <span key={id} data-chat-status>
-          <PaletteWorktreeStatusDot worktree={{ id }} />
-        </span>
-      ))}
-    </PaletteLiveStatusProvider>
-  )
+  const content =
+    consumer === 'parent picker' ? (
+      <ChatParentPickerProbe ids={ids} />
+    ) : consumer === 'sidebar' ? (
+      ids.map((id) => <ChatSidebarProbe key={id} worktreeId={id} />)
+    ) : (
+      <PaletteLiveStatusProvider active>
+        {ids.map((id) => (
+          <span key={id} data-chat-status>
+            <PaletteWorktreeStatusDot worktree={{ id }} />
+          </span>
+        ))}
+      </PaletteLiveStatusProvider>
+    )
   act(() => root?.render(<TooltipProvider>{content}</TooltipProvider>))
 }
 
