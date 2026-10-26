@@ -11,27 +11,32 @@ vi.mock('electron', () => ({
   app: { getPath: vi.fn(() => '/tmp') }
 }))
 
-async function replayDialog(name: string, connectionId?: string) {
+async function replayDialog(
+  name: string,
+  connectionId?: string,
+  pane: Partial<Parameters<typeof createTranscriptPane>[0]> = {}
+) {
   const base = join(__dirname, '__fixtures__', name)
   const size: { cols: number; rows: number } = JSON.parse(readFileSync(`${base}.meta.json`, 'utf8'))
   const bytes = readFileSync(`${base}.txt`)
-  const pane = await createTranscriptPane({
+  const transcript = await createTranscriptPane({
     paneTitle: 'Claude Code',
     foregroundProcess: 'claude',
     launchAgent: 'claude',
+    ...pane,
     connectionId,
     size,
     data: ''
   })
   const decoder = new TextDecoder()
   for (let offset = 0; offset < bytes.length; offset += 1024) {
-    pane.runtime.onPtyData(
+    transcript.runtime.onPtyData(
       TRANSCRIPT_PANE_PTY_ID,
       decoder.decode(bytes.subarray(offset, offset + 1024), { stream: true }),
       Date.now()
     )
   }
-  return pane
+  return transcript
 }
 
 describe.each([undefined, 'ssh:build-host'])(
@@ -52,6 +57,18 @@ describe.each([undefined, 'ssh:build-host'])(
     })
   }
 )
+
+it('reports the trust dialog of a hand-typed native Claude, whose process name is its version', async () => {
+  const { runtime, handle } = await replayDialog('claude-dialog-trust-workspace', undefined, {
+    paneTitle: 'bash',
+    launchAgent: undefined,
+    foregroundProcess: '2.1.310',
+    confirmedForegroundProcess: 'claude'
+  })
+  await expect(runtime.getTerminalInteractiveWait(handle)).resolves.toMatchObject({
+    reason: 'agent-trust-workspace'
+  })
+})
 
 describe('Claude dialog screen observation fences', () => {
   afterEach(() => vi.useRealTimers())

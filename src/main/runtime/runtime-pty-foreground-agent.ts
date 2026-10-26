@@ -1,4 +1,8 @@
 import { recognizeAgentProcess } from '../../shared/agent-process-recognition'
+import { isShellProcess } from '../../shared/shell-process-detection'
+import type { TerminalAgent } from '../../shared/terminal-agent'
+import { withTimeoutResult } from './runtime-async-boundaries'
+import { TERMINAL_INTERACTIVE_WAIT_PROBE_TIMEOUT_MS } from './orca-runtime-core'
 import type { RuntimePtyController } from './runtime-pty-controller-contract'
 import type {
   PtyForegroundAgentRefresh,
@@ -18,6 +22,11 @@ export class RuntimePtyForegroundAgent {
   private readonly refreshes = new Map<string, PtyForegroundAgentRefresh>()
   private readonly reads = new Map<string, PtyForegroundProcessReadEntry>()
   private readonly delayedTitles = new Map<string, number>()
+  // A scan's verdict for an unfamiliar name holds while that name stays in the foreground.
+  private readonly confirmedByPtyId = new Map<
+    string,
+    { foregroundName: string; agent: TerminalAgent | null }
+  >()
 
   constructor(private readonly deps: Dependencies) {}
 
@@ -90,6 +99,18 @@ export class RuntimePtyForegroundAgent {
     return entry.promise
   }
 
+  /** Null when launch, foreground, or command evidence already owns the pane; false when the scan timed out. */
+  identifyUnowned(ptyId: string): Promise<boolean> | null {
+    const pty = this.deps.getPty(ptyId)
+    if (!pty || (pty.launchAgent ?? pty.foregroundAgent ?? pty.launchCommandAgent)) {
+      return null
+    }
+    return withTimeoutResult(
+      this.load(ptyId, 0, true),
+      TERMINAL_INTERACTIVE_WAIT_PROBE_TIMEOUT_MS
+    ).then((result) => result.ok)
+  }
+
   getPending(ptyId: string, afterTitle: number): Promise<boolean> | undefined {
     return this.refreshes.has(ptyId) ? this.refresh(ptyId, afterTitle) : undefined
   }
@@ -113,11 +134,16 @@ export class RuntimePtyForegroundAgent {
     return this.delayedTitles.has(ptyId)
   }
 
-  clearDelayedSnapshot(ptyId: string): void {
+  forget(ptyId: string): void {
     this.delayedTitles.delete(ptyId)
+    this.confirmedByPtyId.delete(ptyId)
   }
 
-  private async load(ptyId: string, afterTitle: number): Promise<boolean> {
+  private async load(
+    ptyId: string,
+    afterTitle: number,
+    confirmUnfamiliar = false
+  ): Promise<boolean> {
     const controller = this.deps.getController()
     const pty = this.deps.getPty(ptyId)
     if (!controller || !pty?.connected || pty.launchAgent) {
@@ -127,13 +153,37 @@ export class RuntimePtyForegroundAgent {
     if (!result || result.controller !== this.deps.getController() || !result.available) {
       return false
     }
-    const agent = result.process ? (recognizeAgentProcess(result.process)?.agent ?? null) : null
+    const foregroundName = result.process
+    let agent = recognizeAgentProcess(foregroundName)?.agent ?? null
+    // Native Claude's p_comm is its version (2.1.310); only a process-table scan reads its argv.
+    if (!agent && foregroundName && !isShellProcess(foregroundName)) {
+      const confirmed = this.confirmedByPtyId.get(ptyId)
+      if (confirmed?.foregroundName === foregroundName) {
+        agent = confirmed.agent
+      } else if (confirmUnfamiliar) {
+        agent = recognizeAgentProcess(await this.confirm(result.controller, ptyId))?.agent ?? null
+        if (result.controller !== this.deps.getController()) {
+          return false
+        }
+        this.confirmedByPtyId.set(ptyId, { foregroundName, agent })
+      }
+    } else {
+      this.confirmedByPtyId.delete(ptyId)
+    }
     if (pty.foregroundAgent === agent) {
       return false
     }
     pty.foregroundAgent = agent
     this.deps.touchSnapshot(ptyId)
     return true
+  }
+
+  private async confirm(controller: RuntimePtyController, ptyId: string): Promise<string | null> {
+    try {
+      return (await controller.confirmForegroundProcess?.(ptyId)) ?? null
+    } catch {
+      return null
+    }
   }
 
   private deleteRead(ptyId: string, entry: PtyForegroundProcessReadEntry): void {
