@@ -130,17 +130,17 @@ const CREATE_INTENT: AgentLaunchIntent = {
 }
 
 describe('a structured launch that creates its own worktree', () => {
-  it('keeps its live inventory through publication and clears it before prompt delivery', async () => {
+  it('keeps its live inventory through publication and clears it after launch', async () => {
     let duringCreate: unknown
-    let duringPrompt: unknown
+    let duringPublication: unknown
     const h = harness({
       onStructuredCreate: () => (duringCreate = readCreatedWorkspaceLaunch(h.runtime, 'wt-new')),
-      onStructuredPromptDelivery: () =>
-        (duringPrompt = readCreatedWorkspaceLaunch(h.runtime, 'wt-new'))
+      onSurfacePublished: () =>
+        (duringPublication = readCreatedWorkspaceLaunch(h.runtime, 'wt-new'))
     })
     await h.run({ ...CREATE_INTENT, prompt: { text: 'start', delivery: 'submit' } })
     expect(duringCreate).toMatchObject({ agent: 'claude', launchId: expect.any(String) })
-    expect(duringPrompt).toBeUndefined()
+    expect(duringPublication).toEqual(duringCreate)
     expect(readCreatedWorkspaceLaunch(h.runtime, 'wt-new')).toBeUndefined()
   })
 
