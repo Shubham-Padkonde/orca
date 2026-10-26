@@ -175,7 +175,7 @@ describe('execution-host conversation writer inspection', () => {
                 row.command === '/bin/sleep 30' &&
                 (!stopped || row.stat.includes('T'))
             )
-          await expect.poll(jobObserved, { timeout: 15000 }).toBe(true)
+          await expect.poll(() => jobObserved(), { timeout: 15000 }).toBe(true)
           if (kind === 'suspended') {
             proc.write('kill -STOP "$job"\r')
             await expect.poll(() => jobObserved(true), { timeout: 15000 }).toBe(true)

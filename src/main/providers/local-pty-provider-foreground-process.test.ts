@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { assert, beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as MacosTccLoginShell from './macos-tcc-login-shell'
 import type * as ForegroundProcess from './agent-foreground-process'
 import type { WindowsProcessRow } from '../windows/windows-process-table'
@@ -232,6 +232,7 @@ describe('LocalPtyProvider', () => {
         rows: 24,
         shellOverride: 'powershell.exe'
       })
+      assert(incarnationId, 'fixture incarnation missing')
       const nativeRow = (
         pid: number,
         ppid: number,
