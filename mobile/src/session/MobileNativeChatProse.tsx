@@ -104,11 +104,9 @@ function ImageAttachment({
 }): React.JSX.Element {
   const { openImage, imageClient } = useContext(MobileNativeChatRowOverlaysContext)
   const direct = block.url ?? block.path
+  const renderable = isRenderableImageUri(direct) ? direct : null
   const storedPath =
-    !isRenderableImageUri(direct) &&
-    imageClient &&
-    block.path &&
-    isAgentSessionAttachmentStorePath(block.path)
+    !renderable && imageClient && block.path && isAgentSessionAttachmentStorePath(block.path)
       ? block.path
       : null
   const [stored, setStored] = useState<{ path: string; uri: string | null } | null>(null)
@@ -125,7 +123,7 @@ function ImageAttachment({
     return () => unmounted.abort()
   }, [imageClient, storedPath])
   const read = storedPath && stored?.path === storedPath ? stored : null
-  const uri = isRenderableImageUri(direct) ? direct : read?.uri
+  const uri = renderable ?? read?.uri
   const label = block.alt ?? 'Attached image'
   if (storedPath && !read) {
     return <View style={styles.imageThumb} accessibilityLabel={label} />

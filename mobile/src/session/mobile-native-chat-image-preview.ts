@@ -31,10 +31,8 @@ export async function readStoredChatImage(
   path: string,
   signal: AbortSignal
 ): Promise<string | null> {
-  let release: () => void
-  try {
-    release = await storedImageReads.acquire(0, signal)
-  } catch {
+  const release = await storedImageReads.acquire(0, signal).catch(() => null)
+  if (!release) {
     return null
   }
   try {

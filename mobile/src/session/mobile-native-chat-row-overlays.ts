@@ -9,7 +9,7 @@ export type MobileNativeChatRowOverlays = {
   openImage: (image: MobileNativeChatViewedImage) => void
   openActions: (message: NativeChatMessage) => void
   /** A structured chat's host client, which reads images from its attachment store. */
-  imageClient?: RpcClient | null
+  imageClient?: RpcClient
 }
 
 export const MobileNativeChatRowOverlaysContext = createContext<MobileNativeChatRowOverlays>({

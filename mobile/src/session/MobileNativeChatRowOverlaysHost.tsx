@@ -18,7 +18,7 @@ export function MobileNativeChatRowOverlaysHost({
   children
 }: {
   conversation: MobileNativeChatConversation
-  imageClient?: RpcClient | null
+  imageClient?: RpcClient
   children?: React.ReactNode
 }): React.JSX.Element {
   // Keep pressed message text with its conversation so streaming cannot rewrite an open sheet.
