@@ -1,5 +1,13 @@
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
-import { View, Pressable, useWindowDimensions, ScrollView, Keyboard, Modal } from 'react-native'
+import {
+  View,
+  Pressable,
+  useWindowDimensions,
+  ScrollView,
+  Keyboard,
+  Modal,
+  Platform
+} from 'react-native'
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler'
 import Animated, {
   useSharedValue,
@@ -146,8 +154,9 @@ export function MountedBottomDrawer({
       }
     }
 
-    // Seed raw keyboard height in fill mode because autoFocus may precede listeners; content sheets must not inherit stale metrics after inner dismiss.
-    if (fillAvailable) {
+    // Seed fill sheets (autoFocus may precede listeners) and page sheets (focus moving under an open keyboard sends no show event).
+    // Native content sheets skip it: metrics go stale after an inner dismiss, and their own Modal window gets a fresh show or drops the IME.
+    if (fillAvailable || Platform.OS === 'web') {
       const existing = currentSoftKeyboardHeight()
       if (existing > 0) {
         applyKeyboardHeight(existing)
