@@ -163,12 +163,7 @@ describe('TerminalHost process inspection', () => {
               getForegroundProcess,
               confirmForegroundProcess: tracker.confirmForegroundProcess,
               inspectChildProcesses: (fresh, ignoreDetached) =>
-                inspectSpawnFileWindowsChildProcesses(
-                  proc,
-                  'powershell.exe',
-                  fresh,
-                  ignoreDetached
-                ),
+                inspectSpawnFileWindowsChildProcesses(proc, shell.name, fresh, ignoreDetached),
               onExit: (callback) =>
                 base.onExit((code) => {
                   dead = true
