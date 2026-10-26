@@ -59,6 +59,8 @@ export type WslDistroHolder = {
   adoptHolders(): Promise<WslDistroHolderAdoption[]>
   /** Explicit stop only; the distro then idles out on WSL's own schedule. */
   release(distro: string): Promise<WslDistroHolderState>
+  /** Every recorded holder (uninstall, hosts turned off); kills only verified holders. */
+  releaseAll(): Promise<WslDistroHolderAdoption[]>
   holderState(distro: string): Promise<WslDistroHolderState>
 }
 
@@ -315,21 +317,32 @@ export function createWslDistroHolder(dependencies: WslDistroHolderDependencies)
     },
 
     release(distro) {
-      return serialize(distro, async () => {
-        const read = await readWslDistroHolderRecord(userDataPath, distro)
-        if (read.status === 'unreadable') {
-          return 'unverifiable'
-        }
-        if (read.status !== 'present') {
-          await removeWslDistroHolderRecord(userDataPath, distro)
-          return 'exited'
-        }
-        return stopRecordedHolder(read.record)
-      })
+      return releaseRecorded(distro)
+    },
+
+    async releaseAll() {
+      const distros = await listWslDistroHolderRecordDistros(userDataPath)
+      return Promise.all(
+        distros.map(async (distro) => ({ distro, state: await releaseRecorded(distro) }))
+      )
     },
 
     holderState(distro) {
       return serialize(distro, async () => (await recordedHolderState(distro)).state)
     }
+  }
+
+  function releaseRecorded(distro: string): Promise<WslDistroHolderState> {
+    return serialize(distro, async () => {
+      const read = await readWslDistroHolderRecord(userDataPath, distro)
+      if (read.status === 'unreadable') {
+        return 'unverifiable'
+      }
+      if (read.status !== 'present') {
+        await removeWslDistroHolderRecord(userDataPath, distro)
+        return 'exited'
+      }
+      return stopRecordedHolder(read.record)
+    })
   }
 }

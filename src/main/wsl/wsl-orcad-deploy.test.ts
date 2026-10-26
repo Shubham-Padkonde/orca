@@ -91,6 +91,7 @@ function holder(): WslDistroHolder {
     }),
     adoptHolders: vi.fn(),
     release: vi.fn(),
+    releaseAll: vi.fn(),
     holderState: vi.fn()
   }
 }

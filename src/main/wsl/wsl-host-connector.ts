@@ -173,8 +173,13 @@ export function createWslHostConnector(options: {
     releaseHolder: async (distro) => {
       await holder.release(distro)
     },
-    adoptHolders: async () => {
-      await holder.adoptHolders()
+    adoptHolders: async (isWanted) => {
+      for (const { distro } of await holder.adoptHolders()) {
+        if (!isWanted(distro)) {
+          // Verified by pid, start time and command line; an unverifiable holder is kept.
+          await holder.release(distro)
+        }
+      }
     },
     dispose: () => liveness.dispose()
   }

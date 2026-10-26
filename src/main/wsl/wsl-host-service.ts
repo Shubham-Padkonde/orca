@@ -41,7 +41,8 @@ export type WslHostConnector = {
   /** Ends the host's terminals, orcad and its terminal daemon; never boots a stopped distro. */
   stopServer(distro: string, environmentId: string): Promise<WslHostServerStop>
   releaseHolder(distro: string): Promise<void>
-  adoptHolders(): Promise<void>
+  /** Startup: keeps the holders an earlier run left and releases those `isWanted` refuses. */
+  adoptHolders(isWanted: (distro: string) => boolean): Promise<void>
   dispose(): Promise<void>
 }
 
@@ -260,12 +261,17 @@ export class WslHostService {
     return id ? this.canRun() && this.visible.has(id) && !this.removing.has(id) : false
   }
 
-  /** Startup: keep the holders a previous run left, without booting anything. */
+  /**
+   * Startup: keep the holders a previous run left for its hosts, without booting anything. A
+   * holder for a distro that is no longer a host (a failed add or remove), or any holder while
+   * hosts are off, would keep its distro running forever, so it is released.
+   */
   async start(): Promise<void> {
-    if (!this.connector || !this.canRun() || this.records().length === 0) {
+    if (!this.connector) {
       return
     }
-    await this.connector.adoptHolders()
+    const canRun = this.canRun()
+    await this.connector.adoptHolders((distro) => canRun && this.isKnownDistro(distro))
   }
 
   /** What the UI shows before offering any WSL host action. */

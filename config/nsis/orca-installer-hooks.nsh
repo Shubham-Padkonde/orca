@@ -59,6 +59,11 @@
     Pop $0
     nsExec::Exec 'taskkill /F /IM "orca-terminal-daemon.exe" $2'
     Pop $0
+    ; WSL hosts: the detached wsl.exe holders outlive the app and keep their distros running. Orca
+    ; ends only the holders its profile recorded, each checked by pid, start time and command line.
+    ; Sync the flag with WSL_HOLDER_UNINSTALL_FLAG in src/main/startup/wsl-holder-uninstall-preflight.ts.
+    nsExec::Exec '"$INSTDIR\${APP_EXECUTABLE_FILENAME}" --orca-uninstall-release-wsl-holders'
+    Pop $0
     Pop $2
     Pop $1
     Pop $0

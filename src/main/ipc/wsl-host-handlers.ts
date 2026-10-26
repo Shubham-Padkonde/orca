@@ -7,6 +7,7 @@ import {
 } from '../../shared/wsl-host-types'
 import type { Store } from '../persistence'
 import { createWslHostConnector } from '../wsl/wsl-host-connector'
+import { createWslDistroHolder } from '../wsl/wsl-distro-holder'
 import {
   createFakeWslHostConnector,
   readFakeWslHostsConfig
@@ -175,6 +176,21 @@ function startService(args: WslHostHandlerArgs): WslHostService | null {
   return created
 }
 
+/** With the gate closed no host runs, so a holder an earlier build left only keeps its distro up. */
+let gatedOffHoldersReleased = false
+
+function releaseHoldersWhileGatedOff(userDataPath: string): void {
+  if (process.platform !== 'win32' || gatedOffHoldersReleased) {
+    return
+  }
+  gatedOffHoldersReleased = true
+  void createWslDistroHolder({ userDataPath })
+    .releaseAll()
+    .catch((error: unknown) => {
+      console.warn('[wsl-hosts] Could not release WSL distro holders:', error)
+    })
+}
+
 export function registerWslHostHandlers(args: WslHostHandlerArgs): void {
   for (const channel of WSL_HOST_HANDLER_CHANNELS) {
     ipcMain.removeHandler(channel)
@@ -182,6 +198,7 @@ export function registerWslHostHandlers(args: WslHostHandlerArgs): void {
   // Install no API without a service, matching the preload gate.
   const wsl = getWslHostService() ?? startService(args)
   if (!wsl) {
+    releaseHoldersWhileGatedOff(args.getUserDataPath())
     return
   }
   ipcMain.handle('wslHosts:listDistros', () => wsl.listDistros())
