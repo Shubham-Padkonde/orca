@@ -63,7 +63,7 @@ export function addWslHostEnvironment(
   }
 ): KnownRuntimeEnvironment {
   const offer = parseBridgedPairing(args.pairingCode)
-  const known = readEnvironmentStore(userDataPath).environments
+  const known = readEnvironmentStore(userDataPath, { recoverBlankStore: true }).environments
   if (known.some((entry) => entry.id === args.id)) {
     throw new RuntimeEnvironmentStoreError(
       'invalid_argument',
@@ -96,9 +96,10 @@ export function addWslHostEnvironment(
   const persisted = PersistedRuntimeEnvironmentSchema.parse(environment)
   writeEnvironmentStore(userDataPath, {
     version: 1,
-    environments: [...readPersistedEnvironmentStore(userDataPath).environments, persisted].sort(
-      (a, b) => a.name.localeCompare(b.name)
-    )
+    environments: [
+      ...readPersistedEnvironmentStore(userDataPath, { recoverBlankStore: true }).environments,
+      persisted
+    ].sort((a, b) => a.name.localeCompare(b.name))
   })
   return resolveEnvironmentFromStore(readEnvironmentStore(userDataPath), args.id)
 }
