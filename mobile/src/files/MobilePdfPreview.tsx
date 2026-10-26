@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { useFocusEffect } from 'expo-router'
 import { ActivityIndicator, Text, View } from 'react-native'
 import { colors } from '../theme/mobile-theme'
@@ -16,14 +16,14 @@ type State =
 // The shell downloads the PDF and shows it in Quick Look (iOS) or the system viewer (Android).
 export function MobilePdfPreview({ media }: { media: MobileFileMedia }) {
   const opener = usePdfOpener()
-  const [state, setState] = useState<State>({ status: 'opening' })
-  const [attempt, setAttempt] = useState(0)
+  const [state, setState] = useState<State>({ status: 'idle' })
   const stopPending = useRef<(() => void) | null>(null)
-  const { worktreeId, relativePath } = media
-  useEffect(() => {
+  // Open only on a tap: this also mounts on hidden screens and after reconnects, where a viewer must not appear.
+  const open = () => {
     if (!opener) {
       return
     }
+    stopPending.current?.()
     let pending = true
     const settle = (next: State) => {
       if (pending) {
@@ -31,15 +31,14 @@ export function MobilePdfPreview({ media }: { media: MobileFileMedia }) {
         setState(next)
       }
     }
-    const stop = () => {
+    stopPending.current = () => {
       if (pending) {
         opener.cancel()
       }
       settle({ status: 'idle' })
     }
-    stopPending.current = stop
     setState({ status: 'opening' })
-    opener.open({ worktreeId, relativePath }).then(
+    opener.open({ worktreeId: media.worktreeId, relativePath: media.relativePath }).then(
       () => settle({ status: 'idle' }),
       (error: unknown) =>
         settle({
@@ -48,11 +47,9 @@ export function MobilePdfPreview({ media }: { media: MobileFileMedia }) {
           retryable: !(error instanceof PdfNoViewerError)
         })
     )
-    return stop
-  }, [opener, worktreeId, relativePath, attempt])
-  // Hidden stack screens stay mounted, so leaving one must stop its open too.
+  }
+  // Hidden stack screens stay mounted, so blur as well as unmount stops an open still downloading.
   useFocusEffect(useCallback(() => () => stopPending.current?.(), []))
-  const reopen = () => setAttempt((count) => count + 1)
   if (!opener) {
     return (
       <View style={styles.state}>
@@ -61,9 +58,7 @@ export function MobilePdfPreview({ media }: { media: MobileFileMedia }) {
     )
   }
   if (state.status === 'failed') {
-    return (
-      <MobileLoadErrorState message={state.message} onRetry={state.retryable ? reopen : null} />
-    )
+    return <MobileLoadErrorState message={state.message} onRetry={state.retryable ? open : null} />
   }
   if (state.status === 'opening') {
     return (
@@ -75,7 +70,7 @@ export function MobilePdfPreview({ media }: { media: MobileFileMedia }) {
   }
   return (
     <View style={styles.state}>
-      <MobileStateButton label="Open PDF" onPress={reopen} />
+      <MobileStateButton label="Open PDF" onPress={open} />
     </View>
   )
 }
