@@ -116,15 +116,13 @@ function ImageAttachment({
     if (!imageClient || !storedPath) {
       return
     }
-    let disposed = false
-    void readStoredChatImage(imageClient, storedPath).then((uri) => {
-      if (!disposed) {
+    const unmounted = new AbortController()
+    void readStoredChatImage(imageClient, storedPath, unmounted.signal).then((uri) => {
+      if (!unmounted.signal.aborted) {
         setStored({ path: storedPath, uri })
       }
     })
-    return () => {
-      disposed = true
-    }
+    return () => unmounted.abort()
   }, [imageClient, storedPath])
   const read = storedPath && stored?.path === storedPath ? stored : null
   const uri = isRenderableImageUri(direct) ? direct : read?.uri

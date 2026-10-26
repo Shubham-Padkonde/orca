@@ -1,4 +1,5 @@
 import { buildImageDataUri } from '../../../src/shared/image-data-uri'
+import { PrioritySemaphore } from '../../../src/shared/priority-semaphore'
 import { filePreviewImageSchema } from '../files/file-preview-reply-schema'
 import { bindDeferredRpcOperation, defineRpcOperation } from '../transport/rpc-operation'
 import { rpcResultVariant } from '../transport/rpc-operation-result-reader'
@@ -21,8 +22,21 @@ const storedImageRead = bindDeferredRpcOperation(
   })
 )
 
+// Each reply can be megabytes; a burst over a slow link overflows the host's outbound queue, which drops the socket.
+const storedImageReads = new PrioritySemaphore(2)
+
 // Null on any failure, including older hosts that refuse this method to phones: the row keeps its placeholder.
-export async function readStoredChatImage(client: RpcClient, path: string): Promise<string | null> {
+export async function readStoredChatImage(
+  client: RpcClient,
+  path: string,
+  signal: AbortSignal
+): Promise<string | null> {
+  let release: () => void
+  try {
+    release = await storedImageReads.acquire(0, signal)
+  } catch {
+    return null
+  }
   try {
     const reply = await storedImageRead.request(
       client,
@@ -33,5 +47,7 @@ export async function readStoredChatImage(client: RpcClient, path: string): Prom
     return image?.isImage && image.content ? buildImageDataUri(image.mimeType, image.content) : null
   } catch {
     return null
+  } finally {
+    release()
   }
 }
