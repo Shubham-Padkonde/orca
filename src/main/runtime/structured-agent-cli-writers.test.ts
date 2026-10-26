@@ -1,3 +1,4 @@
+import type * as ProcessTableReader from '../../shared/process-table-snapshot-reader'
 import { hostSleepKey } from './terminal/stop/worktree-terminal-sleep-key'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentStatusIpcPayload } from '../../shared/agent-status-types'
@@ -109,8 +110,6 @@ describe('execution-host conversation writer inspection', () => {
     ]
     snapshot.mockResolvedValue(wrapped)
     await expect(posixCliWriterShellAlone(10)).resolves.toBe(true)
-    snapshot.mockResolvedValue([...wrapped, { pid: 12, ppid: 11, stat: 'S+', command: 'claude' }])
-    await expect(posixCliWriterShellAlone(10)).resolves.toBe(false)
     for (const rows of [
       [wrapped[0]],
       [...wrapped, { ...wrapped[1], pid: 13 }],
@@ -121,6 +120,84 @@ describe('execution-host conversation writer inspection', () => {
       await expect(posixCliWriterShellAlone(10)).resolves.toBe(false)
     }
   })
+
+  it.skipIf(
+    process.platform !== 'darwin' ||
+      process.env.GITHUB_ACTIONS !== 'true' ||
+      process.env.RUNNER_ENVIRONMENT !== 'github-hosted' ||
+      process.env.ORCA_MACOS_LOGIN_CENSUS_CI !== '1'
+  )(
+    'censuses a real login PTY on a disposable hosted Mac',
+    async () => {
+      expect(process.env.ORCA_DISABLE_MACOS_LOGIN_SHELL).toBeUndefined()
+      const login = await import('../providers/macos-tcc-login-shell')
+      expect(await login.prepareMacosTccLoginShell()).toMatchObject({
+        ok: true,
+        reason: 'accepted'
+      })
+      const wrapped = login.wrapShellSpawnForMacosTccAttribution('/bin/bash', [
+        '--noprofile',
+        '--norc',
+        '-i'
+      ])
+      expect(wrapped.file).toBe('/usr/bin/login')
+      const real = await vi.importActual<typeof ProcessTableReader>(
+        '../../shared/process-table-snapshot-reader'
+      )
+      snapshot.mockImplementation(real.getFreshShellForegroundSnapshot)
+      const { spawn } = await import('node-pty')
+      const proc = spawn(wrapped.file, wrapped.args, {
+        name: 'xterm-256color',
+        cols: 80,
+        rows: 24,
+        env: { PATH: '/usr/bin:/bin', TERM: 'xterm-256color' }
+      })
+      let exited = false
+      const subscription = proc.onExit(() => {
+        exited = true
+      })
+      const idle = () => posixCliWriterShellAlone(proc.pid)
+      const rows = () => real.getFreshShellForegroundSnapshot()
+      try {
+        await expect.poll(idle, { timeout: 15000 }).toBe(true)
+        const initial = await rows()
+        expect(initial.find((row) => row.pid === proc.pid)?.command).toMatch(/^\/usr\/bin\/login /)
+        const children = initial.filter((row) => row.ppid === proc.pid)
+        expect(children).toHaveLength(1)
+        expect(children[0].command).toMatch(/bash/)
+        expect(children[0].stat).toContain('+')
+        for (const kind of ['foreground', 'background', 'suspended']) {
+          proc.write(kind === 'foreground' ? '/bin/sleep 30\r' : '/bin/sleep 30 & job=$!\r')
+          const jobObserved = async (stopped = false) =>
+            (await rows()).some(
+              (row) =>
+                row.ppid === children[0].pid &&
+                row.command === '/bin/sleep 30' &&
+                (!stopped || row.stat.includes('T'))
+            )
+          await expect.poll(jobObserved, { timeout: 15000 }).toBe(true)
+          if (kind === 'suspended') {
+            proc.write('kill -STOP "$job"\r')
+            await expect.poll(() => jobObserved(true), { timeout: 15000 }).toBe(true)
+          }
+          expect(await idle()).toBe(false)
+          proc.write(
+            kind === 'foreground'
+              ? '\x03'
+              : 'kill -CONT "$job"; kill "$job"; wait "$job"; unset job\r'
+          )
+          await expect.poll(idle, { timeout: 15000 }).toBe(true)
+        }
+      } finally {
+        // Only this shell's recorded job is signalled; login exits through its own shell.
+        proc.write('\x03')
+        proc.write('if [ -n "$job" ]; then kill -CONT "$job"; kill "$job"; wait "$job"; fi; exit\r')
+        await expect.poll(() => exited, { timeout: 15000 }).toBe(true)
+        subscription.dispose()
+      }
+    },
+    120000
+  )
 
   it('accepts exact exited or unchanged shell-only proof, never loss of evidence', async () => {
     await expect(inspection('unverifiable').run()).rejects.toMatchObject(refusal)

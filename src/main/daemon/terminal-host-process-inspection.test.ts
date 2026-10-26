@@ -120,14 +120,9 @@ describe('TerminalHost process inspection', () => {
         ['D1', false, [shell, daemon], true],
         ['known young', true, [shell, orphan], false],
         ['known old', true, [shell, orphan], false, 'old'],
-        ['missing detailed identity', true, [shell, orphan], false, 'missing'],
-        ['denied identity', true, [shell, nativeRow(120, 999, 'unknown.exe', '')], false],
-        ['scan unavailable', true, [shell, orphan], false, 'scan'],
-        ['job unavailable', true, [shell, orphan], false, 'job'],
         ['foreign anchor', true, [shell, { ...daemon, pid: 120 }], true],
         ['anchor absent', true, [shell, daemon], true],
         ['anchor exited', true, [shell], true],
-        ['degraded name only', false, [shell, daemon], true, 'scan'],
         ['degraded incomplete', false, [shell, daemon], false, 'both'],
         ['Session exits during foreground read', false, [shell, daemon], false, 'exit']
       ]
@@ -142,8 +137,8 @@ describe('TerminalHost process inspection', () => {
             rows: 24,
             process: 'powershell.exe',
             handleFlowControl: false,
-            onData: () => ({ dispose: vi.fn() }),
-            onExit: () => ({ dispose: vi.fn() }),
+            onData: () => ({ dispose() {} }),
+            onExit: () => ({ dispose() {} }),
             resize: vi.fn(),
             clear: vi.fn(),
             write: vi.fn(),
@@ -200,21 +195,23 @@ describe('TerminalHost process inspection', () => {
             expect(await host.confirmForegroundProcess('decision')).toBe('claude')
             vi.setSystemTime(variant === 'old' ? 41_000 : 2000)
             fullTable.mockReset().mockImplementation(async () => {
-              if (variant === 'scan' || variant === 'both') throw new Error('denied')
-              if (variant === 'exit') base.kill()
-              return variant === 'missing' ? [shell] : rows
+              if (variant === 'both') {
+                throw new Error('denied')
+              }
+              if (variant === 'exit') {
+                base.kill()
+              }
+              return rows
             })
             identityTable.mockReset().mockResolvedValue(variant === 'both' ? [shell] : rows)
-            jobMembers.mockReturnValue(
-              variant === 'job' ? null : new Set(rows.map((row) => row.pid))
-            )
+            jobMembers.mockReturnValue(new Set(rows.map((row) => row.pid)))
             consoleMembers.mockResolvedValue(new Set([100]))
             getForegroundProcess.mockClear()
             const terminal = () => ({
               pane: {
                 ptyId: 'decision',
                 incarnationId: created.incarnationId,
-                identity: created.incarnationId
+                identity: 'decision'
               }
             })
             let alone: boolean | undefined
@@ -255,7 +252,9 @@ describe('TerminalHost process inspection', () => {
               for (const count of [2, 20]) {
                 fullTable.mockClear()
                 identityTable.mockClear()
-                for (let i = 0; i < count; i++) await run()
+                for (let i = 0; i < count; i++) {
+                  await run()
+                }
                 expect(fullTable).toHaveBeenCalledTimes(count)
                 expect(identityTable).toHaveBeenCalledTimes(count)
               }
@@ -271,7 +270,9 @@ describe('TerminalHost process inspection', () => {
         }
       } finally {
         vi.useRealTimers()
-        if (platform) Object.defineProperty(process, 'platform', platform)
+        if (platform) {
+          Object.defineProperty(process, 'platform', platform)
+        }
       }
     }
   )

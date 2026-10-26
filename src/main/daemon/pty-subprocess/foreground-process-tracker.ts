@@ -1,11 +1,9 @@
 import type * as pty from 'node-pty'
-import { ptyShellProcessId } from '../../windows/windows-pty-job'
+import * as foreground from '../../providers/pty-foreground-confirmation'
 import { getAgentForegroundContextPaths } from '../../providers/agent-foreground-context-paths'
 import { confirmPtyShellForeground } from './pty-shell-foreground-confirmation'
 import {
   judgeCachedAgentJobEvidence,
-  reconcileWindowsAgentDecision,
-  type WindowsCachedAgentJobVerdict,
   WINDOWS_DETACHED_DESCENDANT_IDENTITY_MAX_AGE_MS
 } from '../../providers/windows-cached-agent-revalidation'
 import {
@@ -13,8 +11,6 @@ import {
   readWindowsPtyJobProcessIds
 } from '../../providers/windows-pty-job-membership'
 
-import { readWindowsConsoleAttachedProcessIds } from '../../providers/windows-console-attached-processes'
-import { resolveAgentForegroundProcessWithAvailability } from '../../providers/agent-foreground-process'
 import {
   isAgentForegroundWrapperProcess,
   recognizeAgentProcess,
@@ -275,84 +271,42 @@ export function createPtyForegroundProcessTracker(args: {
       }
       const decision = process.platform === 'win32' && context?.decision === true
       const anchor = cachedAgentForeground
-      const shellPid = ptyShellProcessId(proc) ?? proc.pid
-      let verdict: WindowsCachedAgentJobVerdict = 'unavailable'
-      if (decision) {
-        try {
-          verdict = judgeCachedAgentJobEvidence({
-            jobProcessIds: readWindowsPtyJobProcessIds(proc),
-            jobSupported: isWindowsPtyJobReadable(),
-            shellPid,
-            anchorProcessId: anchor?.pid ?? null,
-            identityAgeMs: Date.now() - (anchor?.refreshedAt ?? 0)
-          })
-        } catch {
-          /* A failed job read cannot release a known anchor. */
-        }
-      }
       try {
         const fallbackProcess = getFallbackProcess()
-        const fallbackRecognition = recognizeAgentProcess(fallbackProcess)
-        if (
-          (!fallbackProcess && !decision) ||
-          (fallbackRecognition !== null &&
-            process.platform !== 'win32' &&
-            !shouldInspectOuterWrapperForegroundProcess(fallbackRecognition)) ||
-          (process.platform !== 'win32' && !shouldInspectFallback(fallbackProcess))
-        ) {
+        if (!foreground.shouldConfirmPtyForeground(fallbackProcess, decision)) {
           return fallbackProcess
         }
-        const resolution = await (
-          decision ? resolveAgentForegroundProcessWithAvailability : resolveForeground
-        )(proc.pid, fallbackProcess, {
-          contextPaths,
-          fresh: true,
-          ...(decision && anchor?.pid != null
-            ? { anchorProcessId: anchor.pid, anchorProcessName: anchor.processName }
-            : {}),
-          ...(process.platform === 'win32'
-            ? {
-                forceProcessScan: true,
-                readWindowsConsoleAttachedProcessIds: () =>
-                  readWindowsConsoleAttachedProcessIds(proc.pid)
-              }
-            : {})
-        })
+        const { resolution, processName: decisionName } =
+          await foreground.confirmFreshPtyForeground({
+            process: proc,
+            fallbackProcess,
+            contextPaths,
+            decision,
+            anchor,
+            anchorAt: anchor?.refreshedAt
+          })
         if (args.isDead()) {
           return null
         }
-        if (decision) {
-          const processName = reconcileWindowsAgentDecision(resolution, verdict, anchor, shellPid)
-          const recognized = recognizeAgentProcess(resolution.processName)
-          if (resolution.available && recognized) {
-            cacheAgentForeground(recognized.processName, resolution.processId ?? null)
-          } else if (processName !== anchor?.processName) {
-            cachedAgentForeground = null
-            startupAgentForeground = null
-          }
-          return processName
-        }
-        if (!resolution.available) {
+        if (!resolution.available && !decision) {
           return null
         }
-        const processName =
-          recognizeAgentProcess(resolution.processName)?.processName ?? resolution.processName
-        if (shouldCachePtyForeground(processName, staticName)) {
-          cacheAgentForeground(processName, resolution.processId ?? null)
-          return processName
+        const recognized = recognizeAgentProcess(resolution.processName)
+        const processName = decision
+          ? decisionName
+          : (recognized?.processName ?? resolution.processName)
+        const cacheName = decision ? (recognized?.processName ?? null) : processName
+        if (
+          resolution.available &&
+          shouldCachePtyForeground(cacheName, decision ? false : staticName)
+        ) {
+          cacheAgentForeground(cacheName, resolution.processId ?? null)
+        } else if (!decision || processName !== anchor?.processName) {
+          cachedAgentForeground = null
+          startupAgentForeground = null
         }
-        cachedAgentForeground = null
-        startupAgentForeground = null
-        return resolution.processName
+        return processName
       } catch {
-        if (decision && !args.isDead()) {
-          return reconcileWindowsAgentDecision(
-            { available: false, processName: null },
-            verdict,
-            anchor,
-            shellPid
-          )
-        }
         return null
       }
     },

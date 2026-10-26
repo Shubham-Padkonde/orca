@@ -291,9 +291,13 @@ describe('LocalPtyProvider', () => {
             input.jobFailed ? null : new Set(rows.map((row) => row.pid))
           )
           fullTable.mockReset().mockResolvedValue(input.detailed ?? rows)
-          if (input.scanFailed) fullTable.mockRejectedValue(new Error('denied'))
+          if (input.scanFailed) {
+            fullTable.mockRejectedValue(new Error('denied'))
+          }
           identityTable.mockReset().mockResolvedValue(input.identities ?? rows)
-          if (input.childFailed) identityTable.mockRejectedValue(new Error('denied'))
+          if (input.childFailed) {
+            identityTable.mockRejectedValue(new Error('denied'))
+          }
           consoleMembers.mockResolvedValue(input.consoleFailed ? null : new Set([100]))
           let alone: boolean | undefined
           const host: CliWriterHost = {
@@ -372,10 +376,15 @@ describe('LocalPtyProvider', () => {
         expect(await provider.confirmForegroundProcess(id)).not.toBe('claude')
         for (const replacement of ['object', 'incarnation']) {
           const original = ptyProcesses.get(id)
-          if (!original) throw new Error('fixture PTY missing')
+          if (!original) {
+            throw new Error('fixture PTY missing')
+          }
           fullTable.mockImplementationOnce(async () => {
-            if (replacement === 'object') ptyProcesses.set(id, { ...original })
-            else ptyIncarnations.set(id, 'replacement')
+            if (replacement === 'object') {
+              ptyProcesses.set(id, { ...original })
+            } else {
+              ptyIncarnations.set(id, 'replacement')
+            }
             return [shell]
           })
           await expect(

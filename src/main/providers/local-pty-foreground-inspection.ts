@@ -5,10 +5,8 @@ import {
   getProcessTableSnapshot,
   getStrictProcessTableSnapshotWithAge
 } from '../../shared/process-table-snapshot-reader'
-import {
-  confirmShellForegroundProcess,
-  resolveAgentForegroundProcessWithAvailability
-} from './agent-foreground-process'
+import { confirmShellForegroundProcess } from './agent-foreground-process'
+import { confirmFreshPtyForeground } from './pty-foreground-confirmation'
 import {
   createPtyForegroundResolver,
   ptyProcessNameIsSpawnFile
@@ -31,11 +29,8 @@ import {
 import { resolveStableForegroundProcess } from './stable-foreground-process'
 import {
   canRevalidateCachedAgentWithoutScan,
-  judgeCachedAgentJobEvidence,
-  reconcileWindowsAgentDecision,
-  type WindowsCachedAgentJobVerdict
+  judgeCachedAgentJobEvidence
 } from './windows-cached-agent-revalidation'
-import { readWindowsConsoleAttachedProcessIds } from './windows-console-attached-processes'
 import { isWindowsPtyJobReadable, readWindowsPtyJobProcessIds } from './windows-pty-job-membership'
 
 /** Retired masters still report the spawn name; inspect the descriptor first so unreadability cannot prove idle. */
@@ -254,55 +249,26 @@ export async function confirmLocalPtyForegroundProcess(
   if (!proc) {
     return null
   }
-  const windowsDecision = decision && process.platform === 'win32'
-  const cached = ptyLastRecognizedForeground.get(id)
-  const anchor = cached ? { processName: cached.name, pid: cached.pid } : null
-  const shellPid = ptyShellProcessId(proc) ?? proc.pid
-  let verdict: WindowsCachedAgentJobVerdict = 'unavailable'
-  if (windowsDecision) {
-    try {
-      verdict = judgeCachedAgentJobEvidence({
-        jobProcessIds: readWindowsPtyJobProcessIds(proc),
-        jobSupported: isWindowsPtyJobReadable(),
-        shellPid,
-        anchorProcessId: anchor?.pid ?? null,
-        identityAgeMs: Date.now() - (cached?.at ?? 0)
-      })
-    } catch {
-      /* A failed job read cannot release a known anchor. */
-    }
-  }
   try {
-    const resolveForeground = windowsDecision
-      ? resolveAgentForegroundProcessWithAvailability
-      : createPtyForegroundResolver(proc)
-    const resolution = await resolveForeground(
-      proc.pid,
-      resolveForegroundFallbackProcess(
+    const windowsDecision = decision && process.platform === 'win32'
+    const cached = ptyLastRecognizedForeground.get(id)
+    const anchor = cached ? { processName: cached.name, pid: cached.pid } : null
+    const { resolution, processName } = await confirmFreshPtyForeground({
+      process: proc,
+      fallbackProcess: resolveForegroundFallbackProcess(
         ptyProcessNameIsSpawnFile(proc) ? (getPtyShellName(id) ?? null) : proc.process || null,
         getPtyShellName(id)
       ),
-      {
-        contextPaths: ptyAgentForegroundContextPaths.get(id),
-        fresh: true,
-        ...(windowsDecision && anchor?.pid != null
-          ? { anchorProcessId: anchor.pid, anchorProcessName: anchor.processName }
-          : {}),
-        ...(process.platform === 'win32'
-          ? {
-              forceProcessScan: true,
-              readWindowsConsoleAttachedProcessIds: () =>
-                readWindowsConsoleAttachedProcessIds(proc.pid)
-            }
-          : {})
-      }
-    )
+      contextPaths: ptyAgentForegroundContextPaths.get(id),
+      decision: windowsDecision,
+      anchor,
+      anchorAt: cached?.at
+    })
     // Why: a fresh scan can outlive this PTY id; never publish identity from an exited or same-id-reusing session.
     if (ptyProcesses.get(id) !== proc) {
       return null
     }
     if (windowsDecision) {
-      const processName = reconcileWindowsAgentDecision(resolution, verdict, anchor, shellPid)
       const recognized = recognizeAgentProcessFromCommandLine(resolution.processName ?? '')
       if (resolution.available && recognized) {
         ptyLastRecognizedForeground.set(id, {
@@ -318,14 +284,6 @@ export async function confirmLocalPtyForegroundProcess(
     }
     return resolution.available ? resolution.processName : null
   } catch {
-    if (windowsDecision && ptyProcesses.get(id) === proc) {
-      return reconcileWindowsAgentDecision(
-        { available: false, processName: null },
-        verdict,
-        anchor,
-        shellPid
-      )
-    }
     return null
   }
 }
