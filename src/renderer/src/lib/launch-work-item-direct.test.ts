@@ -40,7 +40,9 @@ vi.mock('@/store', async () => {
   const store = createStore(() => mocks.store)
   Object.defineProperty(mocks, 'store', {
     get: store.getState,
-    set: (state: typeof mocks.store) => store.setState(state, true)
+    set: (state: typeof mocks.store) => {
+      store.setState(state, true)
+    }
   })
   return { useAppStore: store }
 })
