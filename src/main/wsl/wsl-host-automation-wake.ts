@@ -28,7 +28,10 @@ export type WslHostAutomationWakeDeps = {
   load: () => Record<string, WslHostAutomationDue>
   save: (due: Record<string, WslHostAutomationDue>) => void
   listAutomations: (environmentId: string) => Promise<Automation[]>
-  /** Whether the host's server answers now; never starts a stopped distro. */
+  /**
+   * Whether the host's server answers through this process now; never starts a stopped distro.
+   * False is not "stopped": a fresh process has no bridge yet, and the wake then just connects.
+   */
   isConnected: (environmentId: string) => Promise<boolean>
   /** Boots the host's distro and connects; it may refuse (host removed, gate closed). */
   wake: (environmentId: string) => Promise<void>
