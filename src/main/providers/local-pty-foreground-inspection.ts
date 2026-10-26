@@ -5,7 +5,10 @@ import {
   getProcessTableSnapshot,
   getStrictProcessTableSnapshotWithAge
 } from '../../shared/process-table-snapshot-reader'
-import { confirmShellForegroundProcess } from './agent-foreground-process'
+import {
+  confirmShellForegroundProcess,
+  resolveAgentForegroundProcessWithAvailability
+} from './agent-foreground-process'
 import {
   createPtyForegroundResolver,
   ptyProcessNameIsSpawnFile
@@ -28,7 +31,9 @@ import {
 import { resolveStableForegroundProcess } from './stable-foreground-process'
 import {
   canRevalidateCachedAgentWithoutScan,
-  judgeCachedAgentJobEvidence
+  judgeCachedAgentJobEvidence,
+  reconcileWindowsAgentDecision,
+  type WindowsCachedAgentJobVerdict
 } from './windows-cached-agent-revalidation'
 import { readWindowsConsoleAttachedProcessIds } from './windows-console-attached-processes'
 import { isWindowsPtyJobReadable, readWindowsPtyJobProcessIds } from './windows-pty-job-membership'
@@ -241,13 +246,37 @@ async function readPosixSteadyState(
   }
 }
 
-export async function confirmLocalPtyForegroundProcess(id: string): Promise<string | null> {
+export async function confirmLocalPtyForegroundProcess(
+  id: string,
+  decision = false
+): Promise<string | null> {
   const proc = ptyProcesses.get(id)
   if (!proc) {
     return null
   }
+  const windowsDecision = decision && process.platform === 'win32'
+  const cached = ptyLastRecognizedForeground.get(id)
+  const anchor = cached ? { processName: cached.name, pid: cached.pid } : null
+  const shellPid = ptyShellProcessId(proc) ?? proc.pid
+  let verdict: WindowsCachedAgentJobVerdict = 'unavailable'
+  if (windowsDecision) {
+    try {
+      verdict = judgeCachedAgentJobEvidence({
+        jobProcessIds: readWindowsPtyJobProcessIds(proc),
+        jobSupported: isWindowsPtyJobReadable(),
+        shellPid,
+        anchorProcessId: anchor?.pid ?? null,
+        identityAgeMs: Date.now() - (cached?.at ?? 0)
+      })
+    } catch {
+      /* A failed job read cannot release a known anchor. */
+    }
+  }
   try {
-    const resolution = await createPtyForegroundResolver(proc)(
+    const resolveForeground = windowsDecision
+      ? resolveAgentForegroundProcessWithAvailability
+      : createPtyForegroundResolver(proc)
+    const resolution = await resolveForeground(
       proc.pid,
       resolveForegroundFallbackProcess(
         ptyProcessNameIsSpawnFile(proc) ? (getPtyShellName(id) ?? null) : proc.process || null,
@@ -256,6 +285,9 @@ export async function confirmLocalPtyForegroundProcess(id: string): Promise<stri
       {
         contextPaths: ptyAgentForegroundContextPaths.get(id),
         fresh: true,
+        ...(windowsDecision && anchor?.pid != null
+          ? { anchorProcessId: anchor.pid, anchorProcessName: anchor.processName }
+          : {}),
         ...(process.platform === 'win32'
           ? {
               forceProcessScan: true,
@@ -269,8 +301,31 @@ export async function confirmLocalPtyForegroundProcess(id: string): Promise<stri
     if (ptyProcesses.get(id) !== proc) {
       return null
     }
+    if (windowsDecision) {
+      const processName = reconcileWindowsAgentDecision(resolution, verdict, anchor, shellPid)
+      const recognized = recognizeAgentProcessFromCommandLine(resolution.processName ?? '')
+      if (resolution.available && recognized) {
+        ptyLastRecognizedForeground.set(id, {
+          name: recognized.processName,
+          pid: resolution.processId ?? null,
+          at: Date.now(),
+          steady: null
+        })
+      } else if (processName !== anchor?.processName) {
+        ptyLastRecognizedForeground.delete(id)
+      }
+      return processName
+    }
     return resolution.available ? resolution.processName : null
   } catch {
+    if (windowsDecision && ptyProcesses.get(id) === proc) {
+      return reconcileWindowsAgentDecision(
+        { available: false, processName: null },
+        verdict,
+        anchor,
+        shellPid
+      )
+    }
     return null
   }
 }

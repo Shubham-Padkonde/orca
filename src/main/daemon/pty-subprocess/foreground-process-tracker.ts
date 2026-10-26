@@ -4,6 +4,8 @@ import { getAgentForegroundContextPaths } from '../../providers/agent-foreground
 import { confirmPtyShellForeground } from './pty-shell-foreground-confirmation'
 import {
   judgeCachedAgentJobEvidence,
+  reconcileWindowsAgentDecision,
+  type WindowsCachedAgentJobVerdict,
   WINDOWS_DETACHED_DESCENDANT_IDENTITY_MAX_AGE_MS
 } from '../../providers/windows-cached-agent-revalidation'
 import {
@@ -12,6 +14,7 @@ import {
 } from '../../providers/windows-pty-job-membership'
 
 import { readWindowsConsoleAttachedProcessIds } from '../../providers/windows-console-attached-processes'
+import { resolveAgentForegroundProcessWithAvailability } from '../../providers/agent-foreground-process'
 import {
   isAgentForegroundWrapperProcess,
   recognizeAgentProcess,
@@ -43,7 +46,7 @@ export type PtyForegroundProcessTracker = {
   markDead(): void
   /** rawFallback bypasses cached identity and process-table refreshes for cheap polling. */
   getForegroundProcess(options?: { rawFallback?: boolean; cachedOnly?: boolean }): string | null
-  confirmForegroundProcess(): Promise<string | null>
+  confirmForegroundProcess(context?: { decision?: boolean }): Promise<string | null>
   confirmShellForeground(): Promise<boolean>
 }
 
@@ -266,15 +269,32 @@ export function createPtyForegroundProcessTracker(args: {
         return null
       }
     },
-    confirmForegroundProcess: async () => {
+    confirmForegroundProcess: async (context) => {
       if (args.isDead() || !proc.pid) {
         return null
+      }
+      const decision = process.platform === 'win32' && context?.decision === true
+      const anchor = cachedAgentForeground
+      const shellPid = ptyShellProcessId(proc) ?? proc.pid
+      let verdict: WindowsCachedAgentJobVerdict = 'unavailable'
+      if (decision) {
+        try {
+          verdict = judgeCachedAgentJobEvidence({
+            jobProcessIds: readWindowsPtyJobProcessIds(proc),
+            jobSupported: isWindowsPtyJobReadable(),
+            shellPid,
+            anchorProcessId: anchor?.pid ?? null,
+            identityAgeMs: Date.now() - (anchor?.refreshedAt ?? 0)
+          })
+        } catch {
+          /* A failed job read cannot release a known anchor. */
+        }
       }
       try {
         const fallbackProcess = getFallbackProcess()
         const fallbackRecognition = recognizeAgentProcess(fallbackProcess)
         if (
-          !fallbackProcess ||
+          (!fallbackProcess && !decision) ||
           (fallbackRecognition !== null &&
             process.platform !== 'win32' &&
             !shouldInspectOuterWrapperForegroundProcess(fallbackRecognition)) ||
@@ -282,9 +302,14 @@ export function createPtyForegroundProcessTracker(args: {
         ) {
           return fallbackProcess
         }
-        const resolution = await resolveForeground(proc.pid, fallbackProcess, {
+        const resolution = await (
+          decision ? resolveAgentForegroundProcessWithAvailability : resolveForeground
+        )(proc.pid, fallbackProcess, {
           contextPaths,
           fresh: true,
+          ...(decision && anchor?.pid != null
+            ? { anchorProcessId: anchor.pid, anchorProcessName: anchor.processName }
+            : {}),
           ...(process.platform === 'win32'
             ? {
                 forceProcessScan: true,
@@ -293,7 +318,21 @@ export function createPtyForegroundProcessTracker(args: {
               }
             : {})
         })
-        if (args.isDead() || !resolution.available) {
+        if (args.isDead()) {
+          return null
+        }
+        if (decision) {
+          const processName = reconcileWindowsAgentDecision(resolution, verdict, anchor, shellPid)
+          const recognized = recognizeAgentProcess(resolution.processName)
+          if (resolution.available && recognized) {
+            cacheAgentForeground(recognized.processName, resolution.processId ?? null)
+          } else if (processName !== anchor?.processName) {
+            cachedAgentForeground = null
+            startupAgentForeground = null
+          }
+          return processName
+        }
+        if (!resolution.available) {
           return null
         }
         const processName =
@@ -306,6 +345,14 @@ export function createPtyForegroundProcessTracker(args: {
         startupAgentForeground = null
         return resolution.processName
       } catch {
+        if (decision && !args.isDead()) {
+          return reconcileWindowsAgentDecision(
+            { available: false, processName: null },
+            verdict,
+            anchor,
+            shellPid
+          )
+        }
         return null
       }
     },
