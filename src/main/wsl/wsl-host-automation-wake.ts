@@ -1,23 +1,34 @@
 /**
  * E9: a WSL host's automations run inside its distro, so a stopped distro misses them. While a host
- * is connected the desktop learns when its next enabled run is due and keeps that across restarts;
- * when it comes due with the host off, this boots the distro once and orcad's startup catch-up fires
- * the run. A due run is the user's own standing request, so it is the one non-interactive wake.
+ * is connected (and after this desktop changes its automations) the desktop learns its enabled
+ * schedules and keeps them across restarts; when the soonest run comes due with the host off, this
+ * boots the distro once and orcad's startup catch-up fires the run. A due run is the user's own
+ * standing request, so it is the one non-interactive wake. Nothing here boots a distro to check.
  */
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Automation } from '../../shared/automations-types'
+import { nextAutomationOccurrenceAfter } from '../../shared/automation-schedule-occurrences'
+
+export type WslHostAutomationSchedule = {
+  rrule: string
+  dtstart: number
+  missedRunGraceMinutes: number
+}
 
 export type WslHostAutomationDue = {
   nextRunAt: number
   /** Past this, orcad would only record the run as missed, so a wake is pointless. */
   wakeUntil: number
+  /** Every enabled schedule, so the next due time survives a run handled while off. */
+  schedules: WslHostAutomationSchedule[]
 }
 
 export type WslHostAutomationWakeDeps = {
   load: () => Record<string, WslHostAutomationDue>
   save: (due: Record<string, WslHostAutomationDue>) => void
   listAutomations: (environmentId: string) => Promise<Automation[]>
+  /** Whether the host's server answers now; never starts a stopped distro. */
   isConnected: (environmentId: string) => Promise<boolean>
   /** Boots the host's distro and connects; it may refuse (host removed, gate closed). */
   wake: (environmentId: string) => Promise<void>
@@ -30,23 +41,56 @@ const MAX_TIMER_MS = 60 * 60 * 1000
 // orcad's own tick jitter allowance on top of each automation's grace.
 const GRACE_SLACK_MS = 2 * 60 * 1000
 
-/** The soonest enabled run, or null when nothing is scheduled. */
+/** The soonest enabled run and the schedules behind it, or null when nothing is scheduled. */
 export function earliestWslHostAutomationDue(
   automations: readonly Automation[]
 ): WslHostAutomationDue | null {
+  const enabled = automations.filter(
+    (automation) => automation.enabled && Number.isFinite(automation.nextRunAt)
+  )
+  const soonest = enabled.reduce<Automation | null>(
+    (best, automation) => (!best || automation.nextRunAt < best.nextRunAt ? automation : best),
+    null
+  )
+  return soonest
+    ? {
+        nextRunAt: soonest.nextRunAt,
+        wakeUntil: graceEnd(soonest.nextRunAt, soonest.missedRunGraceMinutes),
+        schedules: enabled.map(({ rrule, dtstart, missedRunGraceMinutes }) => ({
+          rrule,
+          dtstart,
+          missedRunGraceMinutes
+        }))
+      }
+    : null
+}
+
+/** The next due run strictly after `after`, from the learned schedules. */
+export function nextWslHostAutomationDue(
+  schedules: readonly WslHostAutomationSchedule[],
+  after: number
+): WslHostAutomationDue | null {
   let due: WslHostAutomationDue | null = null
-  for (const automation of automations) {
-    if (!automation.enabled || !Number.isFinite(automation.nextRunAt)) {
+  for (const schedule of schedules) {
+    let nextRunAt: number
+    try {
+      nextRunAt = nextAutomationOccurrenceAfter(schedule.rrule, schedule.dtstart, after)
+    } catch {
       continue
     }
-    if (!due || automation.nextRunAt < due.nextRunAt) {
+    if (Number.isFinite(nextRunAt) && (!due || nextRunAt < due.nextRunAt)) {
       due = {
-        nextRunAt: automation.nextRunAt,
-        wakeUntil: automation.nextRunAt + automation.missedRunGraceMinutes * 60_000 + GRACE_SLACK_MS
+        nextRunAt,
+        wakeUntil: graceEnd(nextRunAt, schedule.missedRunGraceMinutes),
+        schedules: [...schedules]
       }
     }
   }
   return due
+}
+
+function graceEnd(nextRunAt: number, graceMinutes: number): number {
+  return nextRunAt + graceMinutes * 60_000 + GRACE_SLACK_MS
 }
 
 export class WslHostAutomationWake {
@@ -80,17 +124,13 @@ export class WslHostAutomationWake {
     } catch {
       return
     }
-    if (next) {
-      this.due = { ...this.due, [environmentId]: next }
-    } else {
-      this.drop(environmentId)
-    }
+    this.set(environmentId, next)
     this.persist()
     this.arm()
   }
 
   forget(environmentId: string): void {
-    this.drop(environmentId)
+    this.set(environmentId, null)
     this.persist()
     this.arm()
   }
@@ -100,9 +140,9 @@ export class WslHostAutomationWake {
     this.cancelTimer = null
   }
 
-  private drop(environmentId: string): void {
-    const { [environmentId]: _dropped, ...rest } = this.due
-    this.due = rest
+  private set(environmentId: string, next: WslHostAutomationDue | null): void {
+    const { [environmentId]: _previous, ...rest } = this.due
+    this.due = next ? { ...rest, [environmentId]: next } : rest
   }
 
   private persist(): void {
@@ -130,9 +170,14 @@ export class WslHostAutomationWake {
       if (entry.nextRunAt > now) {
         continue
       }
-      // Once handled, the next due time comes from the host again after it connects.
-      this.drop(environmentId)
-      if (now > entry.wakeUntil || (await this.deps.isConnected(environmentId))) {
+      // Keep the following run whatever happens to this one; a connect re-learns the truth.
+      this.set(environmentId, nextWslHostAutomationDue(entry.schedules, now))
+      if (await this.deps.isConnected(environmentId)) {
+        // Its own scheduler ran it; read the real next run instead of the local estimate.
+        await this.learn(environmentId)
+        continue
+      }
+      if (now > entry.wakeUntil) {
         continue
       }
       await this.deps.wake(environmentId).catch((error: unknown) => {
@@ -154,13 +199,9 @@ export function readWslHostAutomationWakes(
     const due: Record<string, WslHostAutomationDue> = {}
     if (parsed && typeof parsed === 'object') {
       for (const [environmentId, value] of Object.entries(parsed)) {
-        if (
-          value &&
-          typeof value === 'object' &&
-          typeof value.nextRunAt === 'number' &&
-          typeof value.wakeUntil === 'number'
-        ) {
-          due[environmentId] = { nextRunAt: value.nextRunAt, wakeUntil: value.wakeUntil }
+        const entry = parseDue(value)
+        if (entry) {
+          due[environmentId] = entry
         }
       }
     }
@@ -168,6 +209,40 @@ export function readWslHostAutomationWakes(
   } catch {
     return {}
   }
+}
+
+function parseDue(value: unknown): WslHostAutomationDue | null {
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    !('nextRunAt' in value) ||
+    !('wakeUntil' in value) ||
+    !('schedules' in value) ||
+    typeof value.nextRunAt !== 'number' ||
+    typeof value.wakeUntil !== 'number' ||
+    !Array.isArray(value.schedules)
+  ) {
+    return null
+  }
+  const schedules = value.schedules.flatMap((schedule: unknown): WslHostAutomationSchedule[] =>
+    schedule &&
+    typeof schedule === 'object' &&
+    'rrule' in schedule &&
+    'dtstart' in schedule &&
+    'missedRunGraceMinutes' in schedule &&
+    typeof schedule.rrule === 'string' &&
+    typeof schedule.dtstart === 'number' &&
+    typeof schedule.missedRunGraceMinutes === 'number'
+      ? [
+          {
+            rrule: schedule.rrule,
+            dtstart: schedule.dtstart,
+            missedRunGraceMinutes: schedule.missedRunGraceMinutes
+          }
+        ]
+      : []
+  )
+  return { nextRunAt: value.nextRunAt, wakeUntil: value.wakeUntil, schedules }
 }
 
 export function writeWslHostAutomationWakes(

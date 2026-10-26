@@ -7,6 +7,7 @@ import {
 } from '../wsl/wsl-host-automation-wake'
 import type { WslHostService } from '../wsl/wsl-host-service'
 import { callRuntimeEnvironment } from './runtime-environments/runtime-environment-transport-routing'
+import { onWslOrcadHostAutomationsChanged } from '../wsl/wsl-orcad-host-environments'
 
 // A connected host's schedule can change from any client; re-read it this often.
 const RELEARN_MS = 15 * 60 * 1000
@@ -44,6 +45,8 @@ export function createWslHostAutomationWake(
     }
   }, RELEARN_MS)
   relearn.unref?.()
+  // A deleted, disabled or rescheduled automation must not keep its old wake time.
+  onWslOrcadHostAutomationsChanged((environmentId) => void wake.learn(environmentId))
   wake.start()
   return wake
 }
@@ -58,6 +61,8 @@ function automationsFrom(value: unknown): Automation[] {
       Boolean(row) &&
       typeof row === 'object' &&
       typeof row.enabled === 'boolean' &&
+      typeof row.rrule === 'string' &&
+      typeof row.dtstart === 'number' &&
       typeof row.nextRunAt === 'number' &&
       typeof row.missedRunGraceMinutes === 'number'
   )

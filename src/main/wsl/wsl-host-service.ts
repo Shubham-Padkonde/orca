@@ -292,6 +292,24 @@ export class WslHostService {
       })
   }
 
+  /** E9: an enabled automation came due with the host off; boots the distro once, lifting a park. */
+  async wakeForAutomation(environmentId: string): Promise<void> {
+    const record = this.recordForEnvironment(environmentId)
+    if (!record || !this.connector || !this.canRun() || this.removing.has(environmentId)) {
+      return
+    }
+    this.parked.delete(environmentId)
+    await this.connector.connect(record.distro)
+  }
+
+  /** Whether the host's server answers now; never starts a stopped distro. */
+  async isConnected(environmentId: string): Promise<boolean> {
+    const record = this.recordForEnvironment(environmentId)
+    return record && this.connector
+      ? (await this.connector.reachability(record.distro, environmentId)) === 'available'
+      : false
+  }
+
   /** Whether anything may still be started for this distro (spawn guard). */
   isKnownDistro(distro: string): boolean {
     return this.adding.has(wslDistroHolderKey(distro)) || this.recordForDistro(distro) !== null
