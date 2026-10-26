@@ -12,9 +12,7 @@ import {
 import { resolveMobileSourceControlLaunchAgent } from './mobile-source-control-launch-agent'
 import { projectSourceControlActionLaunch } from '../../../src/shared/source-control-action-launch-preferences'
 
-// Launch path for the phone's AI buttons ("Fix checks with AI", "Resolve conflicts with AI", commit
-// recovery, review notes). The host starts the agent and delivers the prompt; the phone never
-// types a prompt into a shell. Kept free of react-native imports so it unit-tests under node.
+// Have the host launch and deliver AI prompts; mobile must never type them into a shell.
 
 export type MobilePromptedAgentLaunch =
   | { kind: 'sent'; warning?: string }
@@ -97,14 +95,12 @@ export async function launchAgentWithPrompt(args: {
   }
 }
 
-/** The confirmation under an AI button, naming the workspace when the screen knows it. */
 export function agentStartedMessage(workspaceLabel: string | null | undefined): string {
   const label = workspaceLabel?.trim()
   return label ? `Agent started in ${label}` : 'Agent started'
 }
 
-/** What the button shows after a launch; one mapping so every AI button reads the same.
- *  `warning` is the host's note on a launch that went ahead, so it is never shown as a failure. */
+// Host warnings describe completed launches and must not become failure notices.
 export function promptedLaunchNotice(
   result: MobilePromptedAgentLaunch,
   workspaceLabel?: string | null

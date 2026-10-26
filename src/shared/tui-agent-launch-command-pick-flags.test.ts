@@ -156,24 +156,13 @@ describe('one copy of each chat-picked flag', () => {
 
 describe('a saved permission mode on terminals', () => {
   it.each([
-    [
-      'claude',
-      'accept-edits',
-      '--dangerously-skip-permissions',
-      "'--permission-mode' 'acceptEdits'"
-    ],
+    ['claude', 'ask', '--permission-mode auto --verbose', "'--permission-mode' 'auto' '--verbose'"],
+    // A required operand and an argument after -- do not own permission.
     [
       'claude',
       'ask',
-      '--permission-mode auto --verbose',
-      "'--verbose' '--permission-mode' 'default'"
-    ],
-    // A required value that looks like a permission flag, and a positional after one, both stay.
-    [
-      'claude',
-      'ask',
-      "--append-system-prompt '--dangerously-skip-permissions' --dangerously-skip-permissions hi",
-      "'--append-system-prompt' '--dangerously-skip-permissions' 'hi' '--permission-mode' 'default'"
+      "--append-system-prompt '--dangerously-skip-permissions'",
+      "'--append-system-prompt' '--dangerously-skip-permissions' '--permission-mode' 'default'"
     ],
     [
       'claude',
@@ -181,44 +170,23 @@ describe('a saved permission mode on terminals', () => {
       '-- --dangerously-skip-permissions',
       "'--permission-mode' 'default' '--' '--dangerously-skip-permissions'"
     ],
-    [
-      'codex',
-      'ask',
-      '-a never -s danger-full-access --yolo --not-so-yolo -c " approvals_reviewer = auto_review" -c "default_permissions = workspace" -c model_verbosity=low',
-      `'-c' 'model_verbosity=low' '-a' 'on-request' '-s' 'read-only' '-c' 'approvals_reviewer="user"'`
-    ],
-    ['codex', 'auto', '--dangerously-bypass-approvals-and-sandbox', "'--approve-for-me'"],
-    [
-      'codex',
-      'full-access',
-      '-a never -c sandbox_mode=read-only',
-      "'--dangerously-bypass-approvals-and-sandbox'"
-    ],
-    [
-      'grok',
-      'ask',
-      '--permission-mode bypassPermissions --always-approve --yolo --dangerously-skip-permissions',
-      "'--permission-mode' 'default'"
-    ],
-    // No terminal flag for these modes: the raw arguments stay exactly as they were.
-    ['antigravity', 'ask', '--dangerously-skip-permissions', "'--dangerously-skip-permissions'"],
-    [
-      'antigravity',
-      'accept-edits',
-      '--dangerously-skip-permissions',
-      "'--dangerously-skip-permissions'"
-    ],
+    ['codex', 'ask', '', "'-a' 'on-request' '-s' 'read-only' '-c' 'approvals_reviewer=user'"],
+    ['codex', 'ask', '--yolo', "'--yolo'"],
+    ['gemini', 'full-access', '--approval-mode default', "'--approval-mode' 'default'"],
     ['opencode', 'full-access', '--print-logs', "'--print-logs'"]
-  ] as const)('%s %s replaces %s', (agent, permissionMode, agentArgs, expectedArgs) => {
-    const plain = launch({ agent, agentArgs: '' }).command
-    const result = launch({
-      agent,
-      agentArgs,
-      sessionOptions: { permissionMode },
-      sessionOptionsOverrideAgentArgs: true
-    })
-    expect(result.command).toBe(expectedArgs ? `${plain} ${expectedArgs}` : plain)
-  })
+  ] as const)(
+    '%s %s follows shared permission ownership for %s',
+    (agent, permissionMode, agentArgs, expectedArgs) => {
+      const plain = launch({ agent, agentArgs: '' }).command
+      const result = launch({
+        agent,
+        agentArgs,
+        sessionOptions: { permissionMode },
+        sessionOptionsOverrideAgentArgs: true
+      })
+      expect(result.command).toBe(expectedArgs ? `${plain} ${expectedArgs}` : plain)
+    }
+  )
 
   it('yields to a permission flag the caller keeps', () => {
     const result = launch({

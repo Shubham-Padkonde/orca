@@ -60,12 +60,7 @@ export type RunSourceControlAgentActionStartArgs = {
     actionId: SourceControlLaunchActionId,
     recipe: SourceControlActionRecipe
   ) => void | Promise<void>
-  /**
-   * Fires as soon as the agent tab/session is created, before deferred
-   * submit-after-ready prompt delivery finishes. Reversible bookkeeping only —
-   * irreversible side effects (posting host replies, resolving threads) belong in
-   * onLaunched, which only fires once the prompt actually reached the agent.
-   */
+  /** Tab creation permits reversible bookkeeping; irreversible host writes belong in onLaunched after prompt delivery. */
   onLaunchAccepted?: () => void
   /** Fires when a launch that already reported onLaunchAccepted failed to deliver its prompt. */
   onLaunchAborted?: () => void
@@ -143,7 +138,7 @@ export async function runSourceControlAgentActionStart({
   const projection = projectSourceControlActionLaunch(
     launchRecipe,
     selectedAgent,
-    { renderedPrompt: trimmedCommandInput },
+    { renderedPrompt: trimmedCommandInput, settings },
     launchChoice
   )
   const {
@@ -219,8 +214,7 @@ export async function runSourceControlAgentActionStart({
     if (result?.surface.kind === 'local-terminal') {
       focusTerminalTabSurface(result.surface.tabId)
     }
-    // Why: lets callers park launch-scoped state before submit-after-ready finishes
-    // (can take tens of seconds); host mutations still wait for delivery below.
+    // Park launch state before slow submit-after-ready completes; host writes still wait for delivery.
     if (launched) {
       notifyLaunchAccepted()
     }

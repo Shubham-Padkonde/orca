@@ -37,6 +37,7 @@ export type LaunchWorkItemDirectArgs = {
   sessionOptions?: Readonly<Record<string, string>>
   /** On terminals, a flag `agentArgs` sets itself wins over the inherited saved choice. */
   sessionOptionsYieldToAgentArgs?: true
+  resolveAgentArgs?: (agent: TuiAgent) => string | null | undefined
   resolveSessionOptions?: (agent: TuiAgent) => Readonly<Record<string, string>> | undefined
   /** For `agentOverride`: a picked surface and host, or a saved replay's terminal. */
   launchChoice?: Pick<AgentLaunchChoice, 'requestedSurface' | 'executionHostId'>

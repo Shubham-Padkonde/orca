@@ -228,7 +228,7 @@ it.each(['codex', null] as const)(
     expect(onStart).toHaveBeenCalledWith(
       expect.objectContaining({
         agent: 'codex',
-        agentArgs: '--model chosen',
+        agentArgs: '--dangerously-bypass-approvals-and-sandbox --model chosen',
         sessionOptions: { model: 'chosen' },
         agentLaunchPreferences: {
           defaultTuiAgent: 'codex',

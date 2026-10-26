@@ -5,13 +5,13 @@ import {
 import { structuredAgentSessionCreateFingerprint } from '../../../shared/structured-agent-session-mutation'
 import type { StructuredAgentSessionCreateParams } from '../../../shared/structured-agent-session-create'
 import { AGENT_CHAT_PERMISSION_MODE_OPTION_ID } from '../../../shared/agent-chat-permission-mode'
-import type { StructuredLaunchState } from './structured-agent-session-launch-registry'
-import { notifyStructuredLaunchListeners } from './structured-agent-session-launch-registry'
+import type { StructuredLaunchState } from './agent-session/launch/structured-agent-session-launch-registry'
+import { notifyStructuredLaunchListeners } from './agent-session/launch/structured-agent-session-launch-registry'
 import {
   prepareStructuredLaunchPromptForCreate,
   prepareLegacyStructuredLaunchPrompts
 } from './structured-agent-session-launch-prompt'
-import type { StructuredAgentLaunchReceipt } from './structured-agent-session-launch-recovery'
+import type { StructuredAgentLaunchReceipt } from './agent-session/launch/structured-agent-session-launch-recovery'
 import {
   structuredAgentSessionOptionView,
   structuredAgentSessionSendSelection

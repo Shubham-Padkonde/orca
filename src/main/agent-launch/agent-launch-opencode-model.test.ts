@@ -2,6 +2,9 @@ import { describe, expect, it, vi } from 'vitest'
 import recordings from '../../shared/fixtures/source-control-launch-recordings.json'
 import type { AgentLaunchIntent } from '../../shared/agent-launch-intent'
 import { executeAgentLaunch } from './agent-launch-executor'
+import { toAgentLaunchPreferences } from '../../shared/agent-launch-preferences'
+import { assertOpenCodeModelLaunchPreferencesAbsent } from '../opencode/opencode-model-startup-plan'
+import { agentPermissionChoices } from '../../shared/tui-agent-permission-choice'
 
 function harness() {
   const readSettings = vi.fn(() => {
@@ -60,6 +63,19 @@ const creating: AgentLaunchIntent = {
 }
 
 describe('OpenCode model preferences on unsupported launch placements', () => {
+  it('keeps own selectable without projecting a meaningless permission into either terminal guard', async () => {
+    const sessionOptions = { permissionMode: 'own' }
+    const projected = toAgentLaunchPreferences(sessionOptions, 'opencode')
+    expect(agentPermissionChoices('opencode')).toContain('own')
+    expect(projected).toBeUndefined()
+    // Workspace creation consumes this projection through the same unchanged broad guard.
+    expect(() => assertOpenCodeModelLaunchPreferencesAbsent('opencode', projected)).not.toThrow()
+    for (const intent of [reused, creating]) {
+      const h = harness()
+      await expect(h.run({ ...intent, sessionOptions })).resolves.toBeDefined()
+    }
+  })
+
   it('refuses the real OpenCode model readback on a reused terminal before prompt delivery', async () => {
     const model = recordings.opencode.update.message.params.update.configOptions.find(
       (option) => option.category === 'model'

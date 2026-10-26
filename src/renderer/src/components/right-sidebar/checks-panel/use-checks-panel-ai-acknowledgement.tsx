@@ -88,16 +88,14 @@ export function useChecksPanelAiAcknowledgement(model: ChecksPanelAiAcknowledgem
   const resolveSelectedThreadsAfterLaunch = useCallback(
     async (resolution: NonNullable<ChecksAgentComposerState['commentResolution']>) => {
       clearSentCommentSelection(resolution.reviewContextKey)
-      // Why: ignore headSha churn; only abort resolve/UI refresh if the user left this PR/panel.
+      // Ignore headSha churn; abort only when the user leaves this review/panel.
       const launchStableKey = checksPanelReviewStableKey(resolution.reviewContextKey)
-      // Why: the host calls keep the snapshotted target, but every UI mutation must belong
-      // to the review the panel is showing now — otherwise replies land in another PR's list.
+      // Host calls keep the snapshotted target; gate UI writes so replies cannot appear in another review.
       const isPanelStillOnLaunchReview = (): boolean =>
         checksPanelReviewStableKey(asyncResultKeyRef.current) === launchStableKey
       const githubTarget = resolution.githubTarget
       const canReplyOnHost = resolution.provider === 'github' && githubTarget != null
-      // Why: only GitHub posts fixing replies today; a GitLab MR reaching replied=0 is expected,
-      // and a missing reply target only matters when something in the selection needs a reply.
+      // Only GitHub supports fixing replies; missing targets matter only when selected comments need replies.
       let lastHostError =
         resolution.provider === 'github' &&
         githubTarget == null &&
@@ -156,8 +154,7 @@ export function useChecksPanelAiAcknowledgement(model: ChecksPanelAiAcknowledgem
                 }
               )
               if (result.ok) {
-                // Why: force threadId/path onto the optimistic row so the sidebar groups it
-                // under the parent immediately (API payload may omit them).
+                // Attach threadId/path because API omissions would otherwise leave optimistic replies outside their parent.
                 if (isPanelStillOnLaunchReview()) {
                   setComments((prev) =>
                     mergePRCommentIntoList(
@@ -180,8 +177,7 @@ export function useChecksPanelAiAcknowledgement(model: ChecksPanelAiAcknowledgem
               return false
             }
           },
-          // Why: CodeRabbit / review-summary / conversation comments have no nested-reply
-          // API, so the ack sends one combined body for all of them.
+          // Conversation/review-summary comments lack nested replies; combine their acknowledgements into one body.
           replyAsConversation: async (body) => {
             if (!githubTarget) {
               return false
@@ -218,8 +214,7 @@ export function useChecksPanelAiAcknowledgement(model: ChecksPanelAiAcknowledgem
         await refreshCommentsRef.current(resolution.provider)
       }
 
-      // Why: surface the underlying API error when replies were possible but none landed.
-      // Resolvable threads are acked by resolving, so replied=0 is correct when nothing needed one.
+      // Report host errors only when replies were needed and supported; resolving alone legitimately yields zero replies.
       const repliedNoneDespiteHostSupport =
         canReplyOnHost &&
         counts.replied === 0 &&

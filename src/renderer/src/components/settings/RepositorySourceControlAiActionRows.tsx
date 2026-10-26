@@ -6,6 +6,7 @@ import {
   sourceControlActionAgentPreview,
   canSaveSourceControlActionSurface
 } from './SourceControlActionAgentPicker'
+import { SourceControlActionArguments } from './SourceControlActionArguments'
 import type React from 'react'
 import { Terminal } from 'lucide-react'
 import type { TuiAgent } from '../../../../shared/tui-agent'
@@ -51,10 +52,7 @@ import { hasOwnActionOverride } from './repository-source-control-ai-draft'
 import { getRepositorySourceControlAiActionRecipeSectionId } from './repository-settings-targets'
 import { translate } from '@/i18n/i18n'
 import { SourceControlActionModelPicker } from './SourceControlActionModelPicker'
-import {
-  SourceControlActionExtraArgsField,
-  SourceControlActionOptionField
-} from './SourceControlActionOptionField'
+import { SourceControlActionOptionField } from './SourceControlActionOptionField'
 import {
   useSourceControlActionAgentInventory,
   useSourceControlActionAgent
@@ -77,7 +75,11 @@ type RepositorySourceControlAiActionRowsProps = {
     value: SourceControlActionLaunchPreferences | undefined
   ) => void
   onActionTemplateChange: (actionId: SourceControlActionId, value: string) => void
-  onActionAgentArgsChange: (actionId: SourceControlActionId, value: string) => void
+  onActionAgentArgsChange: (
+    actionId: SourceControlActionId,
+    value: string,
+    commit?: boolean
+  ) => void
   onAppendVariable: (actionId: SourceControlActionId, variable: string) => void
   /** Per-action saving state for CLI args + command template (matches global recipes). */
   savingActionIds: Partial<Record<SourceControlActionId, boolean>>
@@ -169,14 +171,12 @@ export function RepositorySourceControlAiActionRows({
         const agentSupportText = getSourceControlActionAgentSupportText(actionId)
         const actionDirty = actionDirtyById[actionId]
         const isSavingAction = savingActionIds[actionId] === true
+        const sectionId = getRepositorySourceControlAiActionRecipeSectionId(repoId, actionId)
         return (
           <div
             key={actionId}
-            id={getRepositorySourceControlAiActionRecipeSectionId(repoId, actionId)}
-            data-settings-section={getRepositorySourceControlAiActionRecipeSectionId(
-              repoId,
-              actionId
-            )}
+            id={sectionId}
+            data-settings-section={sectionId}
             className="scroll-mt-8 space-y-3 rounded-md border border-border px-3 py-3"
           >
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -264,17 +264,15 @@ export function RepositorySourceControlAiActionRows({
                           )}
                         </span>
                       </SelectItem>
-                      {SOURCE_CONTROL_TEXT_ACTION_ID_SET.has(actionId) ? (
-                        <SelectItem value={CUSTOM_AGENT_ID}>
-                          <span className="flex items-center gap-2">
-                            <Terminal className="size-3.5 text-muted-foreground" />
-                            {translate(
-                              'auto.components.settings.RepositorySourceControlAiActionRows.2b2f38652b',
-                              'Custom command'
-                            )}
-                          </span>
-                        </SelectItem>
-                      ) : null}
+                      <SelectItem value={CUSTOM_AGENT_ID}>
+                        <span className="flex items-center gap-2">
+                          <Terminal className="size-3.5 text-muted-foreground" />
+                          {translate(
+                            'auto.components.settings.RepositorySourceControlAiActionRows.2b2f38652b',
+                            'Custom command'
+                          )}
+                        </span>
+                      </SelectItem>
                       {agentOptions.map((agent) => (
                         <SelectItem key={agent.id} value={agent.id}>
                           <span className="flex items-center gap-2">
@@ -300,18 +298,21 @@ export function RepositorySourceControlAiActionRows({
                   />
                 ) : null}
                 {isLaunchAction ? (
-                  <SourceControlActionExtraArgsField
-                    value={agentArgsValue}
-                    disabled={!hasOverride}
-                    placeholder={agentArgsPlaceholder}
-                    onChange={(value) => onActionAgentArgsChange(actionId, value)}
+                  <SourceControlActionArguments
+                    agent={pickerAgent}
+                    value={override?.agentArgs}
+                    preferences={recipe.launchPreferences}
+                    disabled={!hasOverride || actual.status === 'pending' || isSavingAction}
+                    onArgsChange={(value, commit) =>
+                      onActionAgentArgsChange(actionId, value, commit)
+                    }
+                    onPreferencesChange={(value) =>
+                      onActionLaunchPreferencesChange(actionId, value)
+                    }
                   />
                 ) : (
                   <SourceControlActionOptionField
-                    label={translate(
-                      'auto.components.settings.RepositorySourceControlAiActionRows.7a3a8e431d',
-                      'CLI arguments'
-                    )}
+                    label={translate('auto.components.settings.AgentsPane.cfb3f35775', 'Arguments')}
                   >
                     <Input
                       value={agentArgsValue}

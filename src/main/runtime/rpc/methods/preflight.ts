@@ -26,7 +26,7 @@ export const PREFLIGHT_METHODS = [
     name: 'preflight.detectAgents',
     permission: 'workspace',
     params: PreflightProjectAgentDetection,
-    // Why the host resolves: only it knows the workspace's project runtime, including WSL.
+    // Only the host knows the workspace's actual project runtime, including WSL.
     handler: async (params, { runtime }) =>
       params.project
         ? runtime.detectProjectLaunchContext(params.project.repo)

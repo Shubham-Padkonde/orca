@@ -41,7 +41,8 @@ import { translate } from '@/i18n/i18n'
 import {
   projectSourceControlActionLaunch,
   resolveSourceControlActionRequestedSurface,
-  resolveSourceControlActionSessionOptions
+  resolveSourceControlActionSessionOptions,
+  sourceControlActionAgentArgs
 } from '../../../shared/source-control-action-launch-preferences'
 
 type StartFixChecksAgentArgs = {
@@ -219,7 +220,7 @@ async function launchFixChecksAgent(args: StartFixChecksAgentArgs): Promise<bool
     const { commandInput: projectedPrompt, ...projection } = projectSourceControlActionLaunch(
       recipe(),
       agent,
-      { renderedPrompt: prompt }
+      { renderedPrompt: prompt, settings: useAppStore.getState().settings }
     )
     let revealFailed = false
     const result = launchAgentInNewTab({
@@ -291,6 +292,8 @@ async function launchFixChecksAgent(args: StartFixChecksAgentArgs): Promise<bool
     telemetrySource: args.telemetrySource,
     promptDelivery: 'submit-after-ready',
     agentArgs: recipe().agentArgs,
+    resolveAgentArgs: (agent) =>
+      sourceControlActionAgentArgs(recipe(), agent, useAppStore.getState().settings),
     resolveSessionOptions: (agent) => resolveSourceControlActionSessionOptions(recipe(), agent),
     sessionOptionsYieldToAgentArgs: recipe().launchPreferencesYieldToAgentArgs,
     ...(agentOverride.kind === 'agent'

@@ -2,14 +2,9 @@ import { isCustomAgentId, type CustomAgentId } from './commit-message-agent-spec
 import { isTuiAgent } from './tui-agent-config'
 import type { TuiAgent } from './tui-agent'
 import { isAgentSessionOptions } from './agent-session-record'
-import {
-  agentChatPermissionModes,
-  type AgentChatPermissionMode
-} from './agent-chat-permission-mode'
+import { agentPermissionChoices, type AgentPermissionChoice } from './tui-agent-permission-choice'
 
-// Why: the variable registry lives in `./source-control-ai-action-variables` for max-lines
-// headroom. It is deliberately not re-exported here — one import path per symbol keeps a
-// grep of that module's consumers complete (the chip row is the one that must not diverge).
+// Keep the variable registry separate for max-lines headroom; no re-export so consumer searches stay complete.
 
 export type SourceControlTextActionId = 'commitMessage' | 'pullRequest' | 'branchName'
 export type AiTextActionId = SourceControlTextActionId | 'conversationName'
@@ -31,7 +26,7 @@ export type SourceControlActionLaunchPreferences = {
   model?: string
   options?: Record<string, string>
   /** Absent: a chat takes the new-chat default, a terminal Agent Permissions or its own arguments. */
-  permissionMode?: AgentChatPermissionMode
+  permissionMode?: AgentPermissionChoice
 }
 
 /** A deliberate pick between the agent's chat and its CLI in a terminal. */
@@ -173,7 +168,7 @@ export function normalizeSourceControlActionLaunchPreferences(
     return undefined
   }
   const model = typeof value.model === 'string' ? value.model.trim() : ''
-  const permissionMode = agentChatPermissionModes(agentId)?.modes.find(
+  const permissionMode = agentPermissionChoices(agentId).find(
     (mode) => mode === value.permissionMode
   )
   // Options belong to a model; the permission mode has its own field.
@@ -280,9 +275,7 @@ export function renderSourceControlActionCommandTemplate(
     /\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}|\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}/g,
     (match, doubleName, singleName) => {
       const name = (doubleName ?? singleName) as string
-      // Why: placeholder names may start with letters or underscores.
-      // Why: only own keys are real variables; inherited Object.prototype names
-      // (e.g. `constructor`) must stay visible instead of rendering their value.
+      // Only own keys are variables; inherited names such as constructor must remain literal placeholders.
       if (!Object.hasOwn(variables, name)) {
         return match
       }

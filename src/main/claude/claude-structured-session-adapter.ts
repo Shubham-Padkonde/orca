@@ -1,4 +1,3 @@
-import { requireLegacyAgentSessionAccountHome } from '../../shared/agent-session-account-home'
 import { waitForPromiseWithSignal } from '../../shared/abort-signal-reason'
 import { dispatchClaudeCommand } from './claude-structured-command-dispatch'
 import type {
@@ -11,7 +10,7 @@ import { claudeHeldSends, claudeHoldsDispatch } from './claude-command-lifecycle
 import { releaseClaudeAcquisition } from './claude-structured-acquisition-release'
 import { acquireClaudeSession } from './claude-structured-session-acquisition'
 import { supportsClaudeStructuredLocation } from './claude-structured-location-support'
-import { setClaudeStructuredSessionOption } from './claude-structured-options'
+import * as claudeOptions from './claude-structured-options'
 import { dispatchClaudeMessage } from './claude-structured-message-options'
 import { readClaudeStructuredSessionOptions } from './claude-structured-session-options'
 import {
@@ -35,7 +34,6 @@ import {
   type ClaudeExitLifecycle
 } from './claude-structured-session-exit-lifecycle'
 import type { AgentSessionBackgroundTaskState } from '../../shared/agent-session-wire'
-import { resolveClaudeProviderHistoryWindow } from './claude-structured-history-window'
 import { drainClaudeChildWork } from './claude-child-work-evidence'
 import { emitClaudeStructuredSessionEvent } from './claude-structured-event-delivery'
 import {
@@ -118,17 +116,6 @@ export class ClaudeStructuredSessionAdapter implements StructuredAgentSessionAda
   /** Await exit publication after cleanup/cursor writes; unproven exits stay indexed for retry. */
   drainObservedExits = (): Promise<void> => drainClaudeObservedExits(this.exits)
 
-  /** Restart reconciliation reads the transcript a resume replays; these maps track liveness. */
-  providerHistoryWindow: NonNullable<StructuredAgentSessionAdapter['providerHistoryWindow']> = (
-    input
-  ) =>
-    resolveClaudeProviderHistoryWindow({
-      identity: input.identity,
-      accountHomePath: requireLegacyAgentSessionAccountHome(input.accountHome).path,
-      hasLiveSession:
-        this.sessions.has(input.identity.sessionId) || this.exits.has(input.identity.sessionId)
-    })
-
   private emit(session: ClaudeSession | null, event: ClaudeStructuredSessionEvent): void {
     emitClaudeStructuredSessionEvent({
       session,
@@ -208,6 +195,7 @@ export class ClaudeStructuredSessionAdapter implements StructuredAgentSessionAda
     const held = session && claudeHeldSends(session)
     return held ?? (this.settledExitErrors.has(sessionId) ? new Set() : undefined)
   }
+  requiresModelTransitionRestart = claudeOptions.claudeModelTransitionRestart(this.sessions)
   holdsLiveProviderProcess = (sessionId: string, acquisitionGeneration: string): boolean => {
     const session = this.sessions.get(sessionId)
     return (
@@ -219,7 +207,7 @@ export class ClaudeStructuredSessionAdapter implements StructuredAgentSessionAda
   answerPrompt: StructuredAgentSessionAdapter['answerPrompt'] = (request) =>
     settleClaudePromptFreeingChild(this.asker(request), answerClaudeStructuredPrompt)
   setOption: StructuredAgentSessionAdapter['setOption'] = (input) =>
-    setClaudeStructuredSessionOption(
+    claudeOptions.setClaudeStructuredSessionOption(
       this.session(input.sessionId),
       input,
       this.deps.requestTimeoutMs
@@ -254,6 +242,9 @@ export class ClaudeStructuredSessionAdapter implements StructuredAgentSessionAda
 
   releaseAcquisition = (input: { sessionId: string }): Promise<boolean> =>
     this.afterClose(input.sessionId, () => this.releaseProviderSession(input.sessionId))
+  acknowledgeSessionRelease = (sessionId: string): void => {
+    this.settledExitErrors.delete(sessionId)
+  }
   hasOwnedAcquisition = (sessionId: string): boolean =>
     this.acquisitions.get(sessionId) !== undefined ||
     this.sessions.has(sessionId) ||

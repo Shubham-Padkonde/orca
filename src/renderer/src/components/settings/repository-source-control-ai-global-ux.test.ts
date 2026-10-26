@@ -45,6 +45,103 @@ const withRecipe = (commandInputTemplate: string): RepoSourceControlAiOverrides 
 })
 
 describe('useRepositorySourceControlAiGlobalUx', () => {
+  it('keeps dirty preferences after failed or same-agent saves and clears the old namespace after a successful switch', async () => {
+    const preferences = { agentId: 'claude', model: 'sonnet', permissionMode: 'ask' } as const
+    const dirty = { ...preferences, model: 'opus', permissionMode: 'full-access' } as const
+    const updateRepo = vi.fn().mockResolvedValue(true)
+    const { result } = setup(
+      {
+        actionOverrides: {
+          fixChecks: {
+            agentId: 'claude',
+            agentArgs: '',
+            commandInputTemplate: 'original',
+            launchPreferences: preferences
+          }
+        }
+      },
+      updateRepo
+    )
+    act(() => {
+      result.current.updateActionLaunchPreferences('fixChecks', dirty)
+      result.current.updateActionAgentArgs('fixChecks', '--verbose')
+      result.current.updateActionTemplate('fixChecks', 'edited')
+    })
+    updateRepo.mockResolvedValueOnce(false)
+    await act(async () => result.current.updateActionAgent('fixChecks', 'codex'))
+    expect(result.current.displayRepoAi.actionOverrides?.fixChecks?.launchPreferences).toEqual(
+      dirty
+    )
+    await act(async () => result.current.updateActionAgent('fixChecks', 'claude'))
+    expect(result.current.displayRepoAi.actionOverrides?.fixChecks?.launchPreferences).toEqual(
+      dirty
+    )
+    await act(async () => result.current.updateActionAgent('fixChecks', 'codex'))
+    expect(
+      result.current.displayRepoAi.actionOverrides?.fixChecks?.launchPreferences
+    ).toBeUndefined()
+    await act(async () => result.current.saveActionRecipeText('fixChecks'))
+    const saved = updateRepo.mock.lastCall?.[1].sourceControlAi
+    const reopened = resolveSourceControlActionRecipe({
+      settings: null,
+      repo: { sourceControlAi: saved },
+      actionId: 'fixChecks'
+    })
+    expect(reopened).toMatchObject({
+      agentId: 'codex',
+      agentArgs: '--verbose',
+      commandInputTemplate: 'edited'
+    })
+    expect(reopened.launchPreferences).toBeUndefined()
+  })
+
+  it.each(['grok', 'claude', 'identical', 'clear'] as const)(
+    'two queued switches preserve a newly authored %s value and unrelated text',
+    async (edit) => {
+      const old = { agentId: 'claude', model: 'sonnet', permissionMode: 'ask' } as const
+      const finishes: ((ok: boolean) => void)[] = []
+      const updateRepo = vi.fn<
+        (repoId: string, updates: SourceControlAiRepoUpdate) => Promise<boolean>
+      >(() => new Promise<boolean>((resolve) => finishes.push(resolve)))
+      const { result } = setup(
+        { actionOverrides: { fixChecks: { agentId: 'claude' } } },
+        updateRepo
+      )
+      act(() => result.current.updateActionLaunchPreferences('fixChecks', old))
+      await act(async () => result.current.updateActionAgent('fixChecks', 'codex'))
+      await act(async () =>
+        result.current.updateActionAgent(
+          'fixChecks',
+          edit === 'clear' ? '__default_agent__' : edit === 'claude' ? 'claude' : 'grok'
+        )
+      )
+      const authored =
+        edit === 'clear'
+          ? undefined
+          : { ...old, agentId: edit === 'grok' ? ('grok' as const) : ('claude' as const) }
+      act(() => {
+        result.current.updateActionLaunchPreferences('fixChecks', authored)
+        result.current.updateActionAgentArgs('fixChecks', '--verbose')
+        result.current.updateActionTemplate('fixChecks', 'new template')
+      })
+      await act(async () => finishes[0](true))
+      await act(async () => finishes[1](true))
+      const row = result.current.displayRepoAi.actionOverrides?.fixChecks
+      expect(row?.launchPreferences).toBe(authored)
+      expect(Object.hasOwn(row ?? {}, 'launchPreferences')).toBe(true)
+      expect(row).toMatchObject({ agentArgs: '--verbose', commandInputTemplate: 'new template' })
+      const save = result.current.saveActionRecipeText('fixChecks')
+      await act(async () => {})
+      await act(async () => {
+        finishes[2](true)
+        await save
+      })
+      expect(
+        updateRepo.mock.lastCall?.[1].sourceControlAi?.actionOverrides?.fixChecks?.launchPreferences
+      ).toEqual(authored)
+    }
+  )
+
   it('persists an immediate edit without completing untouched sparse sibling recipes', async () => {
     const actionOverrides = {
       fixChecks: { agentArgs: null, commandInputTemplate: null, surface: 'terminal' as const },
@@ -72,7 +169,6 @@ describe('useRepositorySourceControlAiGlobalUx', () => {
     act(() => {
       result.current.updateCustomCommand('ollama run llama3.1 {prompt}')
     })
-    // The typed value is shown immediately but NOT written to the backend per keystroke.
     expect(result.current.displayRepoAi.customAgentCommand).toBe('ollama run llama3.1 {prompt}')
     expect(updateRepo).not.toHaveBeenCalled()
     await act(async () => {
@@ -102,7 +198,7 @@ describe('useRepositorySourceControlAiGlobalUx', () => {
     await act(async () => {
       await result.current.saveActionRecipeText('fixCommitFailure')
     })
-    // Baseline advances from setPersisted even before parent re-renders with new props.
+    // Advance the local saved baseline before parent props echo persistence.
     expect(result.current.actionDirtyById.fixCommitFailure).toBe(false)
     expect(
       result.current.displayRepoAi.actionOverrides?.fixCommitFailure?.commandInputTemplate
@@ -119,7 +215,6 @@ describe('useRepositorySourceControlAiGlobalUx', () => {
     act(() => {
       result.current.discardActionRecipeText('fixCommitFailure')
     })
-    // Discard drops the draft: dirty clears and the template reverts to the persisted value.
     expect(result.current.actionDirtyById.fixCommitFailure).toBe(false)
     expect(
       result.current.displayRepoAi.actionOverrides?.fixCommitFailure?.commandInputTemplate
@@ -146,7 +241,6 @@ describe('useRepositorySourceControlAiGlobalUx', () => {
     await act(async () => {
       result.current.updateEnablement(true)
     })
-    // A failed save must not leave the toggle showing an unsaved value as if it were saved.
     expect(result.current.displayRepoAi.enabled).toBeUndefined()
     expect(result.current.saveError).toBe('Failed to save Source Control AI settings.')
   })
@@ -179,12 +273,11 @@ describe('useRepositorySourceControlAiGlobalUx', () => {
     let savePromise: Promise<void> = Promise.resolve()
     await act(async () => {
       savePromise = result.current.saveActionRecipeText('fixCommitFailure')
-      // flush the queue microtask so updateRepo is called and left pending
+      // Flush queued work into updateRepo before leaving the save pending.
       await Promise.resolve()
       await Promise.resolve()
     })
     expect(updateRepo).toHaveBeenCalledTimes(1)
-    // user keeps typing while the save is in flight
     act(() => {
       result.current.updateActionTemplate('fixCommitFailure', 'first-and-more')
     })
@@ -232,7 +325,7 @@ describe('useRepositorySourceControlAiGlobalUx', () => {
       resolveUpdate(true)
       await savePromise
     })
-    // Completing the previous repo's save must not re-apply its draft onto repo-2.
+    // Old-repo save completion must not reapply its draft to the new repo.
     expect(
       result.current.displayRepoAi.actionOverrides?.fixCommitFailure?.commandInputTemplate
     ).toBe('repo-2-template')
@@ -250,7 +343,7 @@ describe('useRepositorySourceControlAiGlobalUx', () => {
       result.current.updateActionAgent('fixCommitFailure', 'codex')
       result.current.updateEnablement(true)
     })
-    // Enablement rolls back; the successfully saved agent override must remain visible.
+    // Roll back failed enablement without discarding the successfully saved agent override.
     expect(result.current.displayRepoAi.enabled).toBeUndefined()
     expect(result.current.displayRepoAi.actionOverrides?.fixCommitFailure?.agentId).toBe('codex')
     expect(result.current.saveError).toBe('Failed to save Source Control AI settings.')
@@ -277,6 +370,67 @@ describe('editing one repository action', () => {
       ...readActionRecipeTextDraft(repo, actionId),
       commandInputTemplate: 'mine'
     })
+
+  it('drafts an inherited model and permission clear separately from untouched sparse preferences', async () => {
+    const inherited = { ...terra, permissionMode: 'ask' } as const
+    const settingsWithPermission = {
+      ...settings,
+      sourceControlAi: {
+        ...settings.sourceControlAi,
+        actions: {
+          ...actions,
+          fixCommitFailure: { ...global, launchPreferences: inherited }
+        }
+      }
+    }
+    const sibling = { ...global, commandInputTemplate: 'sibling' }
+    const legacy: RepoSourceControlAiOverrides = {
+      actionOverrides: {
+        fixCommitFailure: { agentArgs: '--verbose' },
+        fixPushFailure: sibling
+      }
+    }
+    const updateRepo = vi.fn().mockResolvedValue(true)
+    const { result, rerender } = renderHook(
+      (persistedRepoAi: RepoSourceControlAiOverrides) =>
+        useRepositorySourceControlAiGlobalUx({
+          repoId: 'repo',
+          persistedRepoAi,
+          settings: settingsWithPermission,
+          source: settingsWithPermission.sourceControlAi,
+          updateRepo
+        }),
+      { initialProps: legacy }
+    )
+    const effective = () =>
+      resolveSourceControlActionRecipe({
+        settings: settingsWithPermission,
+        repo: { sourceControlAi: result.current.displayRepoAi },
+        actionId: 'fixCommitFailure'
+      })
+    act(() => result.current.updateActionLaunchPreferences('fixCommitFailure', undefined))
+    expect(result.current.actionDirtyById.fixCommitFailure).toBe(true)
+    expect(effective().launchPreferences).toBeUndefined()
+    rerender({ ...legacy, enabled: true })
+    expect(result.current.actionDirtyById.fixCommitFailure).toBe(true)
+    act(() => result.current.discardActionRecipeText('fixCommitFailure'))
+    expect(effective().launchPreferences).toEqual(inherited)
+    act(() => result.current.updateActionLaunchPreferences('fixCommitFailure', undefined))
+    await act(async () => result.current.saveActionRecipeText('fixCommitFailure'))
+    const saved = updateRepo.mock.lastCall?.[1].sourceControlAi
+    const oldImmediate = withRepoAiActionLaunchPreferences(
+      { ...legacy, enabled: true },
+      settingsWithPermission,
+      'fixCommitFailure',
+      undefined
+    )
+    expect(saved).toEqual(toSourceControlAiRepoUpdate(oldImmediate).sourceControlAi)
+    expect(saved.actionOverrides.fixPushFailure).toEqual(sibling)
+    rerender(saved)
+    expect(result.current.actionDirtyById.fixCommitFailure).toBe(false)
+    expect(effective().launchPreferences).toBeUndefined()
+    expect(effective().agentArgs).toBe('--verbose')
+  })
 
   it('keeps a legacy partial row on its agent and empty args when its choice is set or reset', () => {
     const legacy = { actionOverrides: { fixCommitFailure: { agentArgs: '' } } }

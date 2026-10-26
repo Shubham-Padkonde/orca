@@ -17,6 +17,9 @@ describe('toAgentLaunchPreferences', () => {
     })
     // OpenCode's terminal has no permission flag; a released host refuses any option it gets.
     expect(toAgentLaunchPreferences({ permissionMode: 'ask' }, 'opencode')).toBeUndefined()
+    expect(toAgentLaunchPreferences({ permissionMode: 'own' }, 'opencode')).toBeUndefined()
+    expect(toAgentLaunchPreferences({ permissionMode: 'own' }, 'codex')).toEqual({ mode: 'own' })
+    expect(toAgentLaunchPreferences({ permissionMode: 'own' }, 'goose')).toEqual({ mode: 'own' })
     expect(toAgentLaunchPreferences({ permissionMode: 'ask' }, 'antigravity')).toBeUndefined()
   })
 

@@ -1,3 +1,4 @@
+import { seededPermissionMode } from '../../../../shared/native-chat-session-option-defaults'
 // Resolve the host launch identity, then commit an at-rest create or the compatible acquired path.
 
 import { AGENT_CHAT_PERMISSION_MODE_OPTION_ID } from '../../../../shared/agent-chat-permission-mode'
@@ -27,14 +28,12 @@ import {
   type StructuredAgentCliSourceEvidence
 } from '../../../native-chat/structured-agent-cli-source'
 import type { StructuredAgentId } from '../../../../shared/agent-session-provider-handle'
-import {
-  resolveUncommittedStructuredCreate,
-  type StructuredCreateRefused
-} from './structured-agent-session-precommit-refusal'
+import { resolveUncommittedStructuredCreate } from './structured-agent-session-precommit-refusal'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { structuredAgentSessionClosedBeforeCreate } from './structured-agent-session-close-before-create'
 import { structuredLaunchSeedOnSavedListing } from '../../session-tabs/structured-launch-seed-listing'
-import type { ChatTabPlacement } from '../../agent-session-tab-layout'
+import type { ChatTabPlacement } from '../../agent-session/agent-session-tab-layout'
+import { seedOptionsAdmittedOnSavedListing } from '../../agent-session-record-options'
 
 export type PreparedStructuredAgentSessionCreate = {
   host: StructuredAgentSessionHost
@@ -73,8 +72,7 @@ export function structuredAgentSessionCreateIntentFingerprint(params: {
   })
 }
 
-/** The pre-commit half. Throws; the caller is expected to run it inside
- *  `resolveUncommittedStructuredCreate` so a failure reaches the client as a refusal. */
+/** Run throwing pre-commit work inside resolveUncommittedStructuredCreate so clients receive a no-effects refusal. */
 export async function prepareStructuredAgentSessionCreateForWorktree(args: {
   runtime: OrcaRuntimeService
   /** Installs the host lazily; called at the same point the RPC handler always installed it. */
@@ -88,8 +86,7 @@ export async function prepareStructuredAgentSessionCreateForWorktree(args: {
   /** Explicit picks override seed keys at rest; acquired in-process launches replace the seed. */
   optionsMode?: 'replace-model-selection'
   options?: Readonly<Record<string, string>>
-  /** The tab id the caller reserved for this chat, taken when its tab is published; absent, the tab
-   *  gets the id clients derive. Beside `options`, after the fingerprint, likewise. */
+  /** Use the caller-reserved tab id at publication; absent, derive the legacy id. Keep it outside launch fingerprints. */
   tabId?: string
   firstMessage?: StructuredAgentSessionFirstMessage
   atRest?: boolean
@@ -145,9 +142,7 @@ export async function prepareStructuredAgentSessionCreateForWorktree(args: {
     hostLaunchDirectory,
     ...resolvedAttach
   } = resolved
-  // The ledger covers explicit overrides, never defaults that settings can change on replay.
-  // Explicit picks replace the saved selection; the permission default is the chat's own, so a
-  // permission mode picked alone overlays the saved selection.
+  // Fingerprint explicit picks, never replay-varying defaults; explicit options replace saved seeds, while permission default stays chat-owned.
   const overlays = atRest
     ? args.optionsMode !== 'replace-model-selection'
     : Object.keys(args.options ?? {}).every((id) => id === AGENT_CHAT_PERMISSION_MODE_OPTION_ID)
@@ -156,15 +151,13 @@ export async function prepareStructuredAgentSessionCreateForWorktree(args: {
       ? { ...resolved.options, ...args.options }
       : { ...seededPermissionMode(resolved.options), ...args.options }
     : resolved.options
-  // The folder the new-chat picker read its list for, resolved once: the seed and the host's
-  // admission read the same list.
+  // Resolve picker cwd once so seed selection and host admission read the same catalog.
   let folder: Promise<string | null> | undefined
   const catalogFolder = () =>
     (folder ??= args.runtime
       .resolveStructuredAgentSessionLocalWorkspacePath(args.worktree)
       .catch(() => null))
-  // After the fingerprints: a remembered model the saved listing no longer names moves, with the
-  // effort the create runs under it. A model the create names itself is never moved.
+  // After fingerprinting, remap stale remembered model/effort against saved listing; never remap an explicit model.
   const options = args.options?.model
     ? picked
     : await structuredLaunchSeedOnSavedListing(host, args.agent, picked, catalogFolder)
@@ -177,13 +170,23 @@ export async function prepareStructuredAgentSessionCreateForWorktree(args: {
           await catalogFolder()
         )
       : undefined
+  // Fit remembered values to the saved row instead of refusing the create (#31493).
+  const admittedSeed =
+    options && catalogModels && !args.options?.model
+      ? seedOptionsAdmittedOnSavedListing(
+          resolved.provider,
+          options,
+          catalogModels,
+          new Set(Object.keys(args.options ?? {}))
+        )
+      : options
   return {
     host,
     ...(catalogModels ? { catalogModels } : {}),
     ...(hostLaunchDirectory ? { hostLaunchDirectory } : {}),
     attachParams: {
       ...resolvedAttach,
-      ...(options ? { options } : {}),
+      ...(admittedSeed ? { options: admittedSeed } : {}),
       ...(args.tabId ? { surfaceTabId: args.tabId } : {}),
       provider: resolved.provider,
       agent: resolved.agent,
@@ -307,10 +310,9 @@ export async function createStructuredAgentSessionForWorktree(args: {
         payloadFingerprint: structuredAgentSessionCreateIntentFingerprint(args)
       }
     : args.envelope
-  const prepared: PreparedStructuredAgentSessionCreate | StructuredCreateRefused =
-    await resolveUncommittedStructuredCreate(() =>
-      prepareStructuredAgentSessionCreateForWorktree({ ...args, envelope })
-    )
+  const prepared = await resolveUncommittedStructuredCreate(() =>
+    prepareStructuredAgentSessionCreateForWorktree({ ...args, envelope })
+  )
   if ('refusal' in prepared) {
     return { ok: false, refusal: prepared.refusal }
   }
@@ -320,11 +322,4 @@ export async function createStructuredAgentSessionForWorktree(args: {
     prepared,
     activate: args.activate
   })
-}
-
-function seededPermissionMode(
-  options: Readonly<Record<string, string>> | undefined
-): Record<string, string> {
-  const mode = options?.[AGENT_CHAT_PERMISSION_MODE_OPTION_ID]
-  return mode ? { [AGENT_CHAT_PERMISSION_MODE_OPTION_ID]: mode } : {}
 }

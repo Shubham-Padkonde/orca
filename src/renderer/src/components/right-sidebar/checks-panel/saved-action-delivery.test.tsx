@@ -291,7 +291,7 @@ it('owns detection single-flight, returns failed delivery to the editor, then co
   expect(launch.mock.calls[0]?.[0]).toMatchObject({
     agent: 'codex',
     worktreeId: 'repo-1::wt-1',
-    agentArgs: '',
+    agentArgs: '--dangerously-bypass-approvals-and-sandbox',
     requestedSurface: 'terminal'
   })
   expect(f.claimed.current).toBe(payload)

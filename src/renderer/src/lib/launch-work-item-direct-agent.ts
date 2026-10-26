@@ -1,3 +1,4 @@
+import { readLaunchPermissionChoice } from '../../../shared/tui-agent-permission-choice'
 import { toast } from 'sonner'
 import { track, tuiAgentToAgentKind } from '@/lib/telemetry'
 import {
@@ -12,6 +13,7 @@ import type { StartupCommandDelivery } from '../../../shared/codex-startup-deliv
 import type { TuiAgent } from '../../../shared/tui-agent'
 import type { AgentStartupShell } from '../../../shared/tui-agent-startup-shell'
 import {
+  agentLaunchPermissionSettings,
   resolveTuiAgentLaunchArgs,
   resolveTuiAgentLaunchEnv,
   type AgentLaunchProfileSettings
@@ -45,11 +47,24 @@ export function buildDirectWorkItemAgentStartupPlan(args: {
     return { startupPlan: null, draftLaunchedNatively: false, startupPlanFailed: false }
   }
 
+  const permissionSettings = agentLaunchPermissionSettings(
+    args.agent,
+    args.settings ?? {},
+    args.sessionOptions
+  )
   const effectiveAgentArgs =
     args.agentArgs === undefined
-      ? resolveTuiAgentLaunchArgs(args.agent, args.settings)
+      ? resolveTuiAgentLaunchArgs(
+          args.agent,
+          permissionSettings,
+          readLaunchPermissionChoice(args.sessionOptions) ? 'own' : undefined
+        )
       : args.agentArgs
-  const effectiveAgentEnv = resolveTuiAgentLaunchEnv(args.agent, args.settings, args.launchPlatform)
+  const effectiveAgentEnv = resolveTuiAgentLaunchEnv(
+    args.agent,
+    permissionSettings,
+    args.launchPlatform
+  )
   const sessionOptionInputs = terminalSessionOptionInputs({
     agent: args.agent,
     sessionOptions: args.sessionOptions,
@@ -100,7 +115,8 @@ export function buildDirectWorkItemAgentStartupPlan(args: {
     agentArgs: effectiveAgentArgs,
     agentEnv: effectiveAgentEnv,
     ...sessionOptionInputs,
-    allowEmptyPromptLaunch: true
+    allowEmptyPromptLaunch: true,
+    ...(args.promptDelivery === 'submit-after-ready' ? { suppressStartupUpdatePrompt: true } : {})
   })
   if (startupPlan && args.promptDelivery === 'draft') {
     startupPlan.draftPrompt = args.draftContent
@@ -160,7 +176,6 @@ export function notifyDirectWorkItemAgentStartTimeout(agent: TuiAgent, submit: b
       { value0: submit ? 'prompt' : 'work item context' }
     )
   )
-  // Why: process-startup timeout has no v1 enum slot; the `unknown` slice
-  // on the dashboard is the trigger to add one.
+  // Process-startup timeout has no v1 telemetry slot; unknown counts signal when to add one.
   track('agent_error', { error_class: 'unknown', agent_kind: tuiAgentToAgentKind(agent) })
 }

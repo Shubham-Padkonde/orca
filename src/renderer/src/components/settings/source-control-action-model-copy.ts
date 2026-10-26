@@ -9,7 +9,8 @@ import {
   sourceControlActionPermissionModeRoute
 } from '../../../../shared/source-control-action-launch-preferences'
 import { translate } from '@/i18n/i18n'
-import { nativeChatPermissionModeLabel } from '../native-chat/native-chat-permission-mode-labels'
+import { AGENT_CATALOG } from '@/lib/agent-catalog'
+import { agentPermissionChoiceLabel } from './AgentPermissionChoiceControls'
 import { sourceControlActionRouteHint } from './SourceControlActionOptionField'
 
 /** Describes the saved choices and which launches they reach. */
@@ -43,7 +44,10 @@ export function describeSourceControlActionModel(
     {
       value0: [
         ...labels,
-        nativeChatPermissionModeLabel(permissionMode),
+        agentPermissionChoiceLabel(
+          permissionMode,
+          AGENT_CATALOG.find((entry) => entry.id === agent)?.label ?? agent
+        ),
         sourceControlActionRouteHint(sourceControlActionPermissionModeRoute(agent, permissionMode))
       ]
         .filter(Boolean)

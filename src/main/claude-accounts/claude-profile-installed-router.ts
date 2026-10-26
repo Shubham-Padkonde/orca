@@ -1,29 +1,9 @@
-import { lstatSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { isDirectory } from './claude-profile-homes'
 // Keep the router setup graph out of scan workers.
 import type { ClaudeProfileRouter } from './claude-profile-router'
 import type { ClaudeWslProfileRouter } from './claude-profile-wsl-router'
 import type { ClaudeAccountSelectionTarget } from './runtime-selection'
-
-/** Exclude linked history directories to avoid reading them twice. */
-export function isDirectory(path: string): boolean {
-  try {
-    return lstatSync(path).isDirectory()
-  } catch {
-    return false
-  }
-}
-
-export function listClaudeProfileHomes(dataRoot: string): string[] {
-  const root = join(dataRoot, 'claude-profiles')
-  let ids: string[]
-  try {
-    ids = readdirSync(root)
-  } catch {
-    return []
-  }
-  return ids.map((id) => join(root, id, 'home')).filter(isDirectory)
-}
 
 let installed: ClaudeProfileRouter | undefined
 
@@ -54,7 +34,9 @@ export function withClaudeProfileTerminalEnv<Env extends Record<string, string> 
   return profileEnv ? { ...env, ...profileEnv } : env
 }
 
-/** Include account history only where setup could not link it into System default. */
+/** Account homes plus the user's CLAUDE_CONFIG_DIR, which a Dock launch only learns from the login shell. */
 export function claudeProfileHistoryDirs(surface: 'projects' | 'transcripts'): string[] {
-  return (installed?.accountHomes() ?? []).map((home) => join(home, surface)).filter(isDirectory)
+  const userConfigDir = installed?.userConfigDir()
+  const homes = [...(userConfigDir ? [userConfigDir] : []), ...(installed?.accountHomes() ?? [])]
+  return homes.map((home) => join(home, surface)).filter(isDirectory)
 }

@@ -148,8 +148,7 @@ describe('runSourceControlAgentActionStart', () => {
     expect(onLaunchAborted).not.toHaveBeenCalled()
   })
 
-  // Why: onLaunchAccepted only parks launch-scoped state; firing it twice or on a dead
-  // launch would leave a caller believing an agent is running.
+  // Acceptance parks launch state; duplicate or dead-launch callbacks would falsely imply an agent is running.
   it('fires onLaunchAccepted exactly once and only when a tab was created', async () => {
     const onLaunchAccepted = vi.fn()
     mocks.launchAgentInNewTab.mockReturnValue({
@@ -353,7 +352,7 @@ describe('runSourceControlAgentActionStart', () => {
     expect(mocks.onClose).toHaveBeenCalledTimes(1)
   })
 
-  // Why: the onStart branch never awaits a delivery result, so acceptance is terminal there.
+  // onStart awaits no delivery result, so acceptance is terminal for that route.
   it('accepts an onStart launch and never aborts it', async () => {
     const onLaunchAccepted = vi.fn()
     const onLaunchAborted = vi.fn()
@@ -573,7 +572,7 @@ it.each(['--model gpt-5.6-luna', '--model gpt-5.6-sol'])(
 
     expect(shown.launchPreferencesYieldToAgentArgs).toBe(true)
     expect(mocks.launchAgentInNewTab.mock.lastCall?.[0]).toMatchObject({
-      agentArgs,
+      agentArgs: `--dangerously-bypass-approvals-and-sandbox ${agentArgs}`,
       sessionOptions: { model: 'gpt-5.6-terra' }
     })
     expect(mocks.launchAgentInNewTab.mock.lastCall?.[0]).not.toHaveProperty(

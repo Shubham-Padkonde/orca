@@ -107,8 +107,7 @@ describe.each(['posix', 'powershell', 'cmd'] as const)('argument values on %s', 
     const tokens = [
       '--append-system-prompt',
       '--dangerously-skip-permissions',
-      '--permission-mode',
-      'default',
+      '--dangerously-skip-permissions',
       '--',
       'literal'
     ]

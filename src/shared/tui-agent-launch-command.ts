@@ -12,6 +12,11 @@ import {
 } from './tui-agent-startup-shell'
 import type { TuiAgent } from './tui-agent'
 
+// Why: Enter on Codex's "Update available" screen picks "Update now", which installs and exits.
+const STARTUP_UPDATE_PROMPT_SUPPRESSION_ARGS: Partial<Record<TuiAgent, readonly string[]>> = {
+  codex: ['-c', 'check_for_update_on_startup=false']
+}
+
 export type ResolvedAgentLaunchCommand =
   | {
       ok: true
@@ -30,6 +35,8 @@ export function resolveAgentLaunchCommand(args: {
   sessionOptions?: Record<string, SessionOptionValue>
   sessionOptionsOverrideAgentArgs?: boolean
   isRemote?: boolean
+  /** Launch-only, like session options: a resumed session must not inherit it. */
+  suppressStartupUpdatePrompt?: boolean
 }): ResolvedAgentLaunchCommand {
   const override = args.cmdOverrides[args.agent]
   const command =
@@ -37,6 +44,12 @@ export function resolveAgentLaunchCommand(args: {
     getTuiAgentLaunchCommand(TUI_AGENT_CONFIG[args.agent], args.platform, {
       isRemote: args.isRemote
     })
+  const suppressionArgs = args.suppressStartupUpdatePrompt
+    ? (STARTUP_UPDATE_PROMPT_SUPPRESSION_ARGS[args.agent] ?? [])
+    : []
+  const launchHead = suppressionArgs.length
+    ? `${command} ${suppressionArgs.map((arg) => quoteStartupArg(arg, args.shell)).join(' ')}`
+    : command
   const trailingTokens = args.agentArgs?.trim()
     ? tokenizeStartupCommand(args.agentArgs.trim(), args.shell)
     : { ok: true as const, tokens: [], spans: [] }
@@ -47,7 +60,8 @@ export function resolveAgentLaunchCommand(args: {
     args.agent,
     args.sessionOptions,
     args.sessionOptionsOverrideAgentArgs ? [] : trailingTokens.tokens,
-    !args.sessionOptionsOverrideAgentArgs
+    !args.sessionOptionsOverrideAgentArgs,
+    trailingTokens.tokens
   )
   if (override && args.sessionOptionsOverrideAgentArgs) {
     const overrideTokens = tokenizeStartupCommand(override, args.shell)
@@ -78,7 +92,7 @@ export function resolveAgentLaunchCommand(args: {
     : rawTokens
   const render = (tokens: readonly string[]): string =>
     tokens.map((token) => quoteStartupArg(token, args.shell)).join(' ')
-  const withArgs = (suffix: string): string => (suffix ? `${command} ${suffix}` : command)
+  const withArgs = (suffix: string, head = command): string => (suffix ? `${head} ${suffix}` : head)
   const initialTokens = args.sessionOptionsOverrideAgentArgs
     ? insertBeforeTerminator(args.agent, keptTokens, resolvedOptions.args)
     : [...resolvedOptions.args, ...keptTokens]
@@ -88,7 +102,7 @@ export function resolveAgentLaunchCommand(args: {
   )
   return {
     ok: true,
-    command: withArgs(render(initialTokens)),
+    command: withArgs(render(initialTokens), launchHead),
     resumeLaunch: {
       agentCommand: withArgs(resumeArgs),
       ...(keptTokens.length !== rawTokens.length || resolvedOptions.permissionArgs

@@ -126,6 +126,7 @@ describe('launchAgentInNewTab paired web runtime', () => {
       ...(activate ? {} : { selectWorktree: false }),
       agentSessionKind: 'fresh',
       launchAgent: 'claude',
+      preparedAgentCommand: false,
       command: startupPlan.launchCommand,
       env: startupPlan.env,
       launchConfig: startupPlan.launchConfig,
@@ -172,6 +173,7 @@ describe('launchAgentInNewTab paired web runtime', () => {
       activate: true,
       agentSessionKind: 'fresh',
       launchAgent: 'codex',
+      preparedAgentCommand: false,
       command: "codex '--model' 'gpt-5' '--reasoning-effort' 'high' 'fix the spinner'",
       env: { CODEX_PROFILE: 'captured' },
       launchConfig: {

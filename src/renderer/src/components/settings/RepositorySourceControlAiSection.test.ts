@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, render, cleanup, fireEvent } from '@testing-library/react'
-import './settings-persistence-test-fixture'
+import './__fixtures__/settings-persistence-test-fixture'
 import React from 'react'
 import type { TuiAgent } from '../../../../shared/tui-agent'
 import { renderToStaticMarkup } from 'react-dom/server'
@@ -213,11 +213,15 @@ describe('RepositorySourceControlAiActionRows', () => {
           expect(card.textContent).toContain('saved')
         }
         const controls = Array.from(
-          card.querySelectorAll<HTMLButtonElement>('button[role="combobox"].min-w-0')
+          card.querySelectorAll<HTMLButtonElement>(
+            'button[role="combobox"].min-w-0, button[aria-haspopup="menu"]'
+          )
         )
         expect(controls.length).toBeGreaterThan(0)
         expect(controls.every((control) => control.disabled)).toBe(true)
-        expect(card.querySelector('input')?.value).toBe('--saved-cli')
+        expect(
+          card.querySelector<HTMLTextAreaElement>('textarea[aria-label="Arguments"]')?.value
+        ).toBe('--saved-cli')
       }
       await act(async () => {
         finish([...detected])
@@ -225,17 +229,23 @@ describe('RepositorySourceControlAiActionRows', () => {
       expect(cards.map((card) => card.textContent)).toEqual(pendingContent)
       for (const card of cards) {
         const controls = Array.from(
-          card.querySelectorAll<HTMLButtonElement>('button[role="combobox"].min-w-0')
+          card.querySelectorAll<HTMLButtonElement>(
+            'button[role="combobox"].min-w-0, button[aria-haspopup="menu"]'
+          )
         )
         expect(controls.length).toBeGreaterThan(0)
         expect(controls.every((control) => !control.disabled)).toBe(true)
         expect(card.textContent?.includes('Model')).toBe(agent === 'codex')
         expect(card.textContent).toContain('Permissions')
-        // OpenCode's terminal has no permission flag, so its saved mode reaches chats only.
-        expect(card.textContent?.includes('Applies to chats only')).toBe(agent === 'opencode')
-        expect(card.textContent).toContain('Extra CLI arguments')
-        expect(card.querySelector('input')?.value).toBe('--saved-cli')
-        expect(card.querySelector('textarea')?.value).toBe('kept-template')
+        expect(card.textContent).toContain('Arguments')
+        expect(
+          card.querySelector<HTMLTextAreaElement>('textarea[aria-label="Arguments"]')?.value
+        ).toBe('--saved-cli')
+        expect(
+          Array.from(card.querySelectorAll('textarea')).some(
+            (field) => field.value === 'kept-template'
+          )
+        ).toBe(true)
       }
       expect(JSON.stringify(source.actions.fixCommitFailure)).toBe(originalRecipe)
       expect(writeConfig).not.toHaveBeenCalled()

@@ -5,15 +5,8 @@ import {
 import type { SourceControlActionLaunchPreferences } from '../../../../shared/source-control-ai-actions'
 import {
   sourceControlActionAgentPicksModel,
-  sourceControlActionOptions,
-  sourceControlActionPermissionModeRoute,
-  sourceControlActionPermissionModes
+  sourceControlActionOptions
 } from '../../../../shared/source-control-action-launch-preferences'
-import { isAgentChatPermissionMode } from '../../../../shared/agent-chat-permission-mode'
-import {
-  nativeChatPermissionModeLabel,
-  nativeChatPermissionPickerTitle
-} from '../native-chat/native-chat-permission-mode-labels'
 import { encodeCatalogOptionValue } from '../../../../shared/structured-agent-session-option-codec'
 import type { TuiAgent } from '../../../../shared/tui-agent'
 import { Select, SelectContent, SelectItem } from '../ui/select'
@@ -40,8 +33,7 @@ export function SourceControlActionModelPicker({
   onChange
 }: SourceControlActionModelPickerProps): React.JSX.Element | null {
   const picksModel = sourceControlActionAgentPicksModel(agent)
-  const modes = sourceControlActionPermissionModes(agent)
-  if (!agent || (!picksModel && modes.length === 0)) {
+  if (!agent || !picksModel) {
     return null
   }
   const catalog = picksModel ? getAgentSessionOptionCatalog(agent) : null
@@ -99,49 +91,6 @@ export function SourceControlActionModelPicker({
               {unlistedModel ? (
                 <SelectItem value={unlistedModel}>{unlistedModel}</SelectItem>
               ) : null}
-            </SelectContent>
-          </Select>
-        </SourceControlActionOptionField>
-      ) : null}
-      {modes.length > 0 ? (
-        <SourceControlActionOptionField
-          label={nativeChatPermissionPickerTitle()}
-          hint={
-            permissionMode
-              ? sourceControlActionRouteHint(
-                  sourceControlActionPermissionModeRoute(agent, permissionMode)
-                )
-              : translate(
-                  'settings.sourceControl.actionModel.permissionsDefaultHint',
-                  'Terminals use Agent Permissions unless this action sets its own CLI arguments.'
-                )
-          }
-        >
-          <Select
-            value={permissionMode ?? AGENT_DEFAULT_VALUE}
-            disabled={disabled}
-            onValueChange={(next) =>
-              save({
-                model: selected?.model,
-                options: selected?.options,
-                permissionMode: isAgentChatPermissionMode(next) ? next : undefined
-              })
-            }
-          >
-            <SourceControlActionOptionTrigger
-              disabled={disabled}
-              label={permissionMode ? nativeChatPermissionModeLabel(permissionMode) : defaultLabel}
-            />
-            <SelectContent>
-              <SelectItem value={AGENT_DEFAULT_VALUE}>{defaultLabel}</SelectItem>
-              {[
-                ...modes,
-                ...(permissionMode && !modes.includes(permissionMode) ? [permissionMode] : [])
-              ].map((mode) => (
-                <SelectItem key={mode} value={mode}>
-                  {nativeChatPermissionModeLabel(mode)}
-                </SelectItem>
-              ))}
             </SelectContent>
           </Select>
         </SourceControlActionOptionField>

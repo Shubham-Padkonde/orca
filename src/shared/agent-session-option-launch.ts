@@ -9,11 +9,13 @@ import type {
 } from './agent-session-option-catalog-types'
 import type { SessionOptionValue } from './native-chat-session-options'
 import { AGENT_CHAT_PERMISSION_MODE_OPTION_ID } from './agent-chat-permission-mode'
+import { agentPermissionArgsForLaunch } from './tui-agent-launch-defaults'
 import {
-  readLaunchPermissionMode,
-  removeTerminalPermissionArgs,
-  terminalPermissionModeArgs
-} from './agent-permission-mode-terminal-args'
+  readLaunchPermissionChoice,
+  agentPermissionHasTerminalChoice
+} from './tui-agent-permission-choice'
+import { isTuiAgent } from './tui-agent-config'
+import { quoteStartupArg, tokenizeStartupCommand } from './tui-agent-startup-shell'
 import { decodeCatalogOptionValue } from './structured-agent-session-option-codec'
 
 export type ResolvedSessionOptionLaunch = {
@@ -38,11 +40,7 @@ export function removeOverriddenAgentSessionArgs(
   values: Record<string, SessionOptionValue> | null | undefined,
   tokens: readonly string[]
 ): string[] {
-  const permission = readLaunchPermissionMode(values)
-  let result =
-    permission && terminalPermissionModeArgs(agent, permission)
-      ? removeTerminalPermissionArgs(agent, tokens)
-      : [...tokens]
+  let result = [...tokens]
   const catalog = getAgentSessionOptionLaunchCatalog(agent)
   if (!catalog || !values) {
     return result
@@ -72,7 +70,8 @@ export function resolveAgentSessionOptionLaunch(
   agent: AgentType,
   values: Record<string, SessionOptionValue> | null | undefined,
   trailingAgentArgs: readonly string[] = [],
-  includeCatalogDefaults = true
+  includeCatalogDefaults = true,
+  permissionTrailingArgs = trailingAgentArgs
 ): ResolvedSessionOptionLaunch {
   const resolved = resolveModelOptionLaunch(
     agent,
@@ -80,16 +79,17 @@ export function resolveAgentSessionOptionLaunch(
     trailingAgentArgs,
     includeCatalogDefaults
   )
-  const permission = readLaunchPermissionMode(values)
-  const permissionArgs = permission ? terminalPermissionModeArgs(agent, permission) : null
-  // Why: a raw permission flag the caller keeps outranks the saved mode, as a raw model flag does.
-  if (
-    !permission ||
-    !permissionArgs ||
-    removeTerminalPermissionArgs(agent, trailingAgentArgs).length < trailingAgentArgs.length
-  ) {
+  const permission = readLaunchPermissionChoice(values)
+  if (!permission || !isTuiAgent(agent) || !agentPermissionHasTerminalChoice(agent, permission)) {
     return resolved
   }
+  const userArgs = permissionTrailingArgs.map((token) => quoteStartupArg(token, 'posix')).join(' ')
+  const text = agentPermissionArgsForLaunch(agent, permission, userArgs)
+  if (text === null) {
+    return resolved
+  }
+  const parsed = tokenizeStartupCommand(text, 'posix')
+  const permissionArgs = parsed.ok ? parsed.tokens : []
   return {
     args: [...resolved.args, ...permissionArgs],
     permissionArgs,

@@ -59,7 +59,8 @@ export function useSavedSourceControlActionStart() {
         return
       }
       const projection = projectSourceControlActionLaunch(recipe, agent, {
-        basePrompt: args.basePrompt
+        basePrompt: args.basePrompt,
+        settings: args.settings
       })
       const workspace = { worktreeId, kind: workspaceKindForWorktreeId(worktreeId) }
       const [choices, agentLaunchPreferences] = await Promise.all([

@@ -44,10 +44,7 @@ export type SourceControlAgentActionDialogProps = {
     recipe: SourceControlActionRecipe
   ) => void | Promise<void>
   onOpenSettings?: () => void
-  /**
-   * Fires when the agent tab is created, before deferred prompt delivery finishes.
-   * Reversible bookkeeping only; irreversible host writes belong in onLaunched.
-   */
+  /** Tab creation precedes prompt delivery: use reversible bookkeeping here; host writes belong in onLaunched. */
   onLaunchAccepted?: () => void
   /** Fires when an accepted launch later failed to deliver its prompt. */
   onLaunchAborted?: () => void

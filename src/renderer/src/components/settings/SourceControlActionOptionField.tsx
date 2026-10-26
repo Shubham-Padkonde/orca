@@ -1,9 +1,4 @@
-import { useState, type ReactNode } from 'react'
-import { ChevronDown } from 'lucide-react'
-import { cn } from '@/lib/utils'
-import { Button } from '../ui/button'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../ui/collapsible'
-import { Input } from '../ui/input'
+import type { ReactNode } from 'react'
 import { Label } from '../ui/label'
 import { SelectTrigger, SelectValue } from '../ui/select'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip'
@@ -35,49 +30,6 @@ export function sourceControlActionRouteHint(route: SourceControlActionChoiceRou
     : route === 'terminals'
       ? translate('settings.sourceControl.actionModel.terminalsOnly', 'Applies to terminals only')
       : null
-}
-
-/** The action's free-text arguments, appended to terminal launches only. An advanced setting: it
- *  starts collapsed while empty, and opening or closing it saves nothing. */
-export function SourceControlActionExtraArgsField({
-  value,
-  placeholder,
-  disabled,
-  onChange
-}: {
-  value: string
-  placeholder?: string
-  disabled?: boolean
-  onChange: (value: string) => void
-}): React.JSX.Element {
-  const [open, setOpen] = useState(() => value.trim() !== '')
-  const label = translate('settings.sourceControl.actionModel.extraArgs', 'Extra CLI arguments')
-  return (
-    <Collapsible open={open} onOpenChange={setOpen} className="min-w-0">
-      <CollapsibleTrigger asChild>
-        <Button type="button" variant="ghost" size="xs" className="-ml-1.5">
-          {label}
-          <ChevronDown className={cn('transition-transform', open && 'rotate-180')} />
-        </Button>
-      </CollapsibleTrigger>
-      <CollapsibleContent>
-        <div className="mt-1 space-y-2">
-          <Input
-            aria-label={label}
-            value={value}
-            onChange={(event) => onChange(event.target.value)}
-            disabled={disabled}
-            placeholder={placeholder}
-            spellCheck={false}
-            className="h-8 font-mono text-xs disabled:cursor-not-allowed disabled:bg-muted/40"
-          />
-          <p className="text-[11px] text-muted-foreground">
-            {sourceControlActionRouteHint('terminals')}
-          </p>
-        </div>
-      </CollapsibleContent>
-    </Collapsible>
-  )
 }
 
 export function SourceControlActionOptionTrigger({

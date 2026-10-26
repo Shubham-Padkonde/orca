@@ -29,11 +29,11 @@ export type DirectWorkItemAgentLaunchPreparation = {
   launchConnectionId: string | null
   unavailable: boolean
   effectiveAgent: TuiAgent | null
+  agentArgs?: string | null
   startupPlan: ReturnType<typeof buildDirectWorkItemStartup>['startupPlan']
   draftLaunchedNatively: boolean
   startupPlanFailed: boolean
   structuredLaunch: boolean
-  /** Null when no agent was selected. */
   plan: AgentSessionLaunchPlan | null
 }
 
@@ -57,8 +57,7 @@ function directLaunchProjectRuntime(
 }
 
 function resolveDirectWorkItemLaunchHost(args: DirectLaunchHostArgs): KnownExecutionHostPlatform {
-  // Why the repo's owner: the worktree was created on that host and may not be hydrated yet; its
-  // own path and runtime still refine the OS (a WSL worktree on a Windows host runs in Linux).
+  // Use the creation repo’s host before workspace hydration, refined by its path/runtime (for example Windows-host WSL runs Linux).
   const fact = resolveRepoExecutionHostPlatform(
     args.latestStore,
     args.repoHost,
@@ -89,6 +88,7 @@ export async function prepareDirectWorkItemAgentLaunch(args: {
   agentOverride?: TuiAgent
   agentArgs?: string | null
   sessionOptions?: Readonly<Record<string, string>>
+  resolveAgentArgs?: (agent: TuiAgent) => string | null | undefined
   resolveSessionOptions?: (agent: TuiAgent) => Readonly<Record<string, string>> | undefined
   launchChoice?: LaunchWorkItemDirectArgs['launchChoice']
   sessionOptionsYieldToAgentArgs?: true
@@ -104,7 +104,6 @@ export async function prepareDirectWorkItemAgentLaunch(args: {
   repoLaunchHost: KnownExecutionHostPlatform
   repoProjectRuntime?: ProjectExecutionRuntimeResolution
   planLaunch: typeof planAgentSessionLaunch
-  /** The start action this launch serves. */
   requestId: AgentLaunchRequestId
   preflightPlan?: AgentSessionLaunchPlan
 }): Promise<DirectWorkItemAgentLaunchPreparation> {
@@ -141,6 +140,8 @@ export async function prepareDirectWorkItemAgentLaunch(args: {
         // Non-critical: activation still has the explicit startup below.
       })
   }
+  const agentArgs =
+    effectiveAgent && args.resolveAgentArgs ? args.resolveAgentArgs(effectiveAgent) : args.agentArgs
   const sessionOptions = effectiveAgent
     ? args.resolveSessionOptions
       ? args.resolveSessionOptions(effectiveAgent)
@@ -166,7 +167,7 @@ export async function prepareDirectWorkItemAgentLaunch(args: {
     ? { startupPlan: null, draftLaunchedNatively: false, startupPlanFailed: false }
     : buildDirectWorkItemStartup({
         agent: effectiveAgent,
-        agentArgs: args.agentArgs,
+        agentArgs,
         sessionOptions,
         sessionOptionsYieldToAgentArgs: args.sessionOptionsYieldToAgentArgs,
         draftContent: args.draftContent,
@@ -181,6 +182,7 @@ export async function prepareDirectWorkItemAgentLaunch(args: {
     launchConnectionId,
     unavailable: false,
     effectiveAgent,
+    agentArgs,
     startupPlan,
     draftLaunchedNatively,
     startupPlanFailed,

@@ -102,7 +102,7 @@ describe('CommitMessageAiPane', () => {
     expect(markup).toContain('Push failure fixes')
     expect(markup).toContain('Broken checks fixes')
     expect(markup).toContain('Conflict resolution')
-    expect(markup).toContain('CLI arguments')
+    expect(markup).toContain('Arguments')
     expect(markup).toContain('Command template')
     expect(markup).toContain('Custom command')
     expect(markup).toContain('{basePrompt}')

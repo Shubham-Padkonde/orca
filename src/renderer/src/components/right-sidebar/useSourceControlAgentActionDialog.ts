@@ -97,9 +97,7 @@ export function useSourceControlAgentActionDialog({
       }),
     [actionId, repo, settings, choice.observation.preferences]
   )
-  // Why: when this repo already overrides the global default, default the save
-  // scope to the repo so saving the corrected agent updates that override in
-  // place instead of writing a global default the override would still shadow.
+  // Update existing repo overrides in place; a new global default would remain shadowed.
   const defaultSaveTargetValue =
     launchAgentScope.overridesGlobalAgent && repoId ? 'repo' : DEFAULT_SAVE_TARGET_VALUE
   const saveTargetValue = explicitSaveTarget ?? defaultSaveTargetValue

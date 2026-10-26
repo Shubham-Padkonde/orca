@@ -145,7 +145,8 @@ export async function launchSourceControlRecoveryAgentWithDefault({
     actionId,
     promptOverride,
     commandInputTemplate: savedRecipe.commandInputTemplate,
-    basePrompt
+    basePrompt,
+    settings: store.settings
   })
   if (!prompt) {
     toast.error(copy.emptyPrompt)
@@ -176,7 +177,8 @@ export async function launchSourceControlRecoveryAgentWithDefault({
     return false
   }
   const { commandInput, ...projection } = projectSourceControlActionLaunch(savedRecipe, agent, {
-    renderedPrompt: prompt
+    renderedPrompt: prompt,
+    settings: store.settings
   })
   const result = launchAgentInNewTab({
     requestId: newAgentLaunchRequestId(),

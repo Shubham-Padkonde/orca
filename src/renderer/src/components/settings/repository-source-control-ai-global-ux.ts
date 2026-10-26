@@ -1,3 +1,4 @@
+import { liftActionPermissionArgs } from '../../../../shared/source-control-action-permission-lift'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import type { TuiAgent } from '../../../../shared/tui-agent'
@@ -9,8 +10,7 @@ import type {
 import type { SourceControlAiRepoUpdate } from '../../../../shared/source-control-ai-recipe-save'
 import type {
   SourceControlActionRecipe,
-  SourceControlActionId,
-  SourceControlActionLaunchPreferences
+  SourceControlActionId
 } from '../../../../shared/source-control-ai-actions'
 import { useMountedRef } from '@/hooks/useMountedRef'
 import {
@@ -18,7 +18,7 @@ import {
   composeDisplayRepoAi,
   computeActionDirtyById,
   hasOwnActionOverride,
-  patchActionTextDraft,
+  readCompleteRecipeForDraft,
   readActionRecipeTextDraft,
   type ActionRecipeTextDraft,
   retainCustomCommandDraft,
@@ -29,16 +29,13 @@ import {
   withRepoAiEnabled,
   withRepoAiHostedReviewDefault
 } from './repository-source-control-ai-draft'
-import {
-  ACTION_MODE_INHERIT,
-  DEFAULT_AGENT_VALUE,
-  readInheritedCommandTemplate
-} from './repository-source-control-ai-labels'
+import { ACTION_MODE_INHERIT, DEFAULT_AGENT_VALUE } from './repository-source-control-ai-labels'
 import { createRepoAiPersistQueue } from './repository/source-control/repository-source-control-ai-persist-queue'
+import { withRepoAiActionAgent } from './repository-source-control-ai-action-agent-draft'
 import {
-  withRepoAiActionAgent,
-  withRepoAiActionLaunchPreferences
-} from './repository-source-control-ai-action-agent-draft'
+  createRepoActionTextDraftEditors,
+  resetActionDraftLaunchPreferences
+} from './repository-source-control-ai-text-draft'
 
 export { normalizeRepoAiDraft as normalizePersistedRepoAi } from './repository-source-control-ai-draft'
 
@@ -144,16 +141,20 @@ export function useRepositorySourceControlAiGlobalUx({
   }
 
   const persist = (
-    transform: (base: RepoSourceControlAiOverrides) => RepoSourceControlAiOverrides
+    transform: (base: RepoSourceControlAiOverrides) => RepoSourceControlAiOverrides,
+    onSuccess?: () => void
   ): void => {
     const repoIdForWrite = beginWrite()
     void queueRef.current.persistTransform(transform).then((ok) => {
       if (!endWrite(repoIdForWrite)) {
         return
       }
-      // Only snap when no sibling write is in flight — a failed field must not wipe another.
+      // Roll back only without sibling writes so one failed field cannot erase another.
       if (!ok && pendingWritesRef.current === 0) {
         commitImmediate(persistedRef.current)
+      }
+      if (ok) {
+        onSuccess?.()
       }
     })
   }
@@ -165,7 +166,7 @@ export function useRepositorySourceControlAiGlobalUx({
 
   const commitCustomCommand = (value: string | undefined): void => {
     setCustomCommandDraft(value ?? '')
-    // Blur fires even when unchanged — skip the queue for true no-ops.
+    // Unchanged blur must not enter the persistence queue.
     const next = withRepoAiCustomCommand(persistedRef.current, value)
     if (JSON.stringify(next) === JSON.stringify(persistedRef.current)) {
       setCustomCommandDraft((latest) => (latest === (value ?? '') ? null : latest))
@@ -212,48 +213,30 @@ export function useRepositorySourceControlAiGlobalUx({
         : value === CUSTOM_AGENT_ID
           ? CUSTOM_AGENT_ID
           : (value as TuiAgent)
+    const changed =
+      readCompleteRecipeForDraft(immediateRepoAiRef.current, settings, actionId).agentId !== agentId
+    const captured = actionTextDrafts[actionId]?.launchPreferences
     commitImmediate(
       withRepoAiActionAgent(immediateRepoAiRef.current, settings, actionId, agentId, choice)
     )
-    persist((base) => withRepoAiActionAgent(base, settings, actionId, agentId, choice))
-  }
-
-  const updateActionLaunchPreferences = (
-    actionId: SourceControlActionId,
-    value: SourceControlActionLaunchPreferences | undefined
-  ): void => {
-    commitImmediate(
-      withRepoAiActionLaunchPreferences(immediateRepoAiRef.current, settings, actionId, value)
-    )
-    persist((base) => withRepoAiActionLaunchPreferences(base, settings, actionId, value))
-  }
-
-  const updateActionTemplate = (actionId: SourceControlActionId, value: string): void => {
-    setActionTextDrafts((current) =>
-      patchActionTextDraft(current, immediateRepoAiRef.current, actionId, {
-        commandInputTemplate: value
-      })
+    persist(
+      (base) => withRepoAiActionAgent(base, settings, actionId, agentId, choice),
+      () => {
+        if (changed) {
+          setActionTextDrafts((current) =>
+            resetActionDraftLaunchPreferences(current, actionId, agentId, captured)
+          )
+        }
+      }
     )
   }
 
-  const updateActionAgentArgs = (actionId: SourceControlActionId, value: string): void => {
-    setActionTextDrafts((current) =>
-      patchActionTextDraft(current, immediateRepoAiRef.current, actionId, { agentArgs: value })
-    )
-  }
-
-  const appendVariable = (actionId: SourceControlActionId, variable: string): void => {
-    setActionTextDrafts((current) => {
-      const draft =
-        current[actionId] ?? readActionRecipeTextDraft(immediateRepoAiRef.current, actionId)
-      const currentTemplate =
-        draft.commandInputTemplate || readInheritedCommandTemplate(source, actionId)
-      const separator = currentTemplate.endsWith('\n') || currentTemplate.length === 0 ? '' : ' '
-      return patchActionTextDraft(current, immediateRepoAiRef.current, actionId, {
-        commandInputTemplate: `${currentTemplate}${separator}{${variable}}`
-      })
-    })
-  }
+  const {
+    updateActionLaunchPreferences,
+    updateActionTemplate,
+    updateActionAgentArgs,
+    appendVariable
+  } = createRepoActionTextDraftEditors(setActionTextDrafts, immediateRepoAiRef, source)
 
   const actionDirtyById = useMemo(
     () => computeActionDirtyById(immediateRepoAi, baselineRepoAi, actionTextDrafts),
@@ -264,8 +247,15 @@ export function useRepositorySourceControlAiGlobalUx({
     if (!actionDirtyById[actionId] || savingActionIds[actionId]) {
       return
     }
-    const draft =
-      actionTextDrafts[actionId] ?? readActionRecipeTextDraft(immediateRepoAiRef.current, actionId)
+    const draft = liftActionPermissionArgs(
+      {
+        ...(actionTextDrafts[actionId] ??
+          readActionRecipeTextDraft(immediateRepoAiRef.current, actionId)),
+        agentId: immediateRepoAiRef.current.actionOverrides?.[actionId]?.agentId
+      },
+      true,
+      actionId
+    )
     setSavingActionIds((current) => ({ ...current, [actionId]: true }))
     const repoIdForWrite = beginWrite()
     try {
@@ -284,7 +274,9 @@ export function useRepositorySourceControlAiGlobalUx({
         immediateRepoAiRef.current = next
         return next
       })
-      setActionTextDrafts((current) => clearActionTextDraftIfUnchanged(current, actionId, draft))
+      setActionTextDrafts((current) =>
+        clearActionTextDraftIfUnchanged(current, actionId, actionTextDrafts[actionId] ?? draft)
+      )
     } finally {
       pendingWritesRef.current = Math.max(0, pendingWritesRef.current - 1)
       if (mountedRef.current && repoIdRef.current === repoIdForWrite) {
@@ -301,8 +293,8 @@ export function useRepositorySourceControlAiGlobalUx({
   }
 
   const displayRepoAi = useMemo(
-    () => composeDisplayRepoAi(immediateRepoAi, customCommandDraft, actionTextDrafts),
-    [actionTextDrafts, customCommandDraft, immediateRepoAi]
+    () => composeDisplayRepoAi(immediateRepoAi, customCommandDraft, actionTextDrafts, settings),
+    [actionTextDrafts, customCommandDraft, immediateRepoAi, settings]
   )
 
   return {
