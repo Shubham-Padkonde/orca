@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
 import {
-  adapterFor as codexAdapterFor,
   fakeCodex,
   THREAD_ID as CODEX_THREAD_ID
 } from '../../src/main/codex/codex-structured-session-adapter-fixture'
+import { structuredAgentRuntimeRegistration } from '../../src/main/runtime/structured-agent-runtime-registrations'
 import { act, renderHook, waitFor, cleanup } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import type { SDKStatusMessage } from '@anthropic-ai/claude-agent-sdk'
@@ -458,7 +458,7 @@ it.each([
 )
 
 it('publishes accepted Codex fresh policy to desktop and phone without stale startup readback', async () => {
-  const { host, store } = hostTestState()
+  const { host, store, root } = hostTestState()
   const answer = Promise.withResolvers<unknown>()
   const codex = fakeCodex({ 'turn/start': () => answer.promise })
   codex.routes['thread/start'] = () => ({
@@ -469,11 +469,30 @@ it('publishes accepted Codex fresh policy to desktop and phone without stale sta
     sandbox: { type: 'workspaceWrite' }
   })
   const settlements: Promise<void>[] = []
-  const adapter = codexAdapterFor(codex, {}, [], {
-    onEvent: (event) => {
-      if (event.type === 'options-reported') {
-        settlements.push(host.handleAdapterEvent(event))
-      }
+  const adapter = structuredAgentRuntimeRegistration('codex')!.createAdapter({
+    deps: {
+      ...host.deps,
+      stateDirectory: root,
+      hostId: 'local',
+      resolveWorkspacePath: async () => root,
+      resolveLaunchArgs: () => [],
+      resolveClaudeAuthPolicy: () => ({ account: 'managed' as const }),
+      resolveCodexCommand: () => 'codex',
+      readCodexInstallation: async () => ({ version: '0.136.0' }),
+      readProcessStartTime: async () => 1_700_000_000_000,
+      openCodexConnection: codex.openConnection
+    },
+    store,
+    journalDatabase: host.deps.journalDatabase,
+    environment: {
+      resolveBaseEnvironment: async () => ({}),
+      resolveAgentEnvironment: async () => ({}),
+      refreshAfterMissingProgram: async () => {}
+    },
+    host: () => host,
+    followUps: { onDispatchSettledLate: () => {} },
+    deliverLifecycle: (event) => {
+      settlements.push(host.handleAdapterEvent(event))
     }
   })
   host.deps.adapter = adapter
@@ -507,7 +526,7 @@ it('publishes accepted Codex fresh policy to desktop and phone without stale sta
       expect(await desktop.result.current.setStructuredOption('permissionMode', 'ask')).toBe(true)
     })
     const saved = structuredClone(store.getRecord(sessionId))
-    const staleRead = await adapter.prepareReadOptions({ sessionId, fence })
+    const staleRead = (await adapter.prepareReadOptions!({ sessionId, fence }))!
     sending = adapter.dispatch({
       sessionId,
       clientMessageId: 'same-child-ask',
@@ -570,6 +589,7 @@ it('publishes accepted Codex fresh policy to desktop and phone without stale sta
     resetHostModelCatalogSnapshotsForTests()
     await host.close(sessionId, 'user-close')
     await adapter.closeAll()
+    await Promise.all(settlements)
     setLocalRuntimeCapabilitiesForTests(null)
   }
 })
