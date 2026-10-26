@@ -3375,6 +3375,18 @@
         }
       }
     },
+    "tab": {
+      "bar": {
+        "bulkClose": {
+          "confirm": "Close tabs",
+          "description": "The selected tabs will be closed. Pinned tabs will stay open.",
+          "editors": "Close all editor tabs?",
+          "left": "Close tabs to the left?",
+          "others": "Close other tabs?",
+          "right": "Close tabs to the right?"
+        }
+      }
+    },
     "workspace": {
       "cleanup": {
         "browse": {
