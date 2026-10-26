@@ -233,6 +233,7 @@ describe('AI operation recovery composer', () => {
     async (cancel) => {
       const settings = getDefaultSettings(path.resolve('tmp'))
       settings.disabledTuiAgents = ['codex']
+      settings.agentPermissionDefault = 'ask'
       settings.sourceControlAi!.actions = { resolveConflicts: { agentId: 'codex' } }
       const pending = Promise.withResolvers<{
         settings: ReturnType<typeof projectAgentLaunchSettings>
@@ -283,11 +284,21 @@ describe('AI operation recovery composer', () => {
           sourceRepoConnectionId: null,
           actionId: 'fixCommitFailure',
           basePrompt: 'fix',
-          getLaunchActionRecipe: () => ({ agentId: null }),
+          getLaunchActionRecipe: () => ({
+            agentId: null,
+            agentArgs: '--model chosen',
+            commandInputTemplate: 'Recovery: {basePrompt}'
+          }),
           getStoreState: useAppStore.getState,
           copy: getDefaultSourceControlRecoveryLaunchCopy('commit')
         })
-        expect(launchAgent).toHaveBeenLastCalledWith(expect.objectContaining({ agent: 'codex' }))
+        expect(launchAgent).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            agent: 'codex',
+            prompt: 'Recovery: fix',
+            agentArgs: '-a on-request -s read-only -c approvals_reviewer=user --model chosen'
+          })
+        )
       }
     }
   )

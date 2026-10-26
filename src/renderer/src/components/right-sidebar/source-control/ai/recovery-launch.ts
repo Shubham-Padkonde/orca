@@ -136,6 +136,7 @@ export async function launchSourceControlRecoveryAgentWithDefault({
   }
   const [choices, preferences] = inventory
   const detectedAgents = [...(choices.detected ?? [])]
+  const store = getStoreState()
   const savedRecipe = getLaunchActionRecipe(actionId)
   if (!basePrompt) {
     toast.error(copy.promptUnavailable)
@@ -145,8 +146,7 @@ export async function launchSourceControlRecoveryAgentWithDefault({
     actionId,
     promptOverride,
     commandInputTemplate: savedRecipe.commandInputTemplate,
-    basePrompt,
-    settings: store.settings
+    basePrompt
   })
   if (!prompt) {
     toast.error(copy.emptyPrompt)
