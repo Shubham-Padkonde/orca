@@ -1,4 +1,11 @@
-import type { RuntimeHeadlessTerminal } from '../../runtime-terminal-state-records'
+import type {
+  RuntimeHeadlessTerminal,
+  RuntimePtyWorktreeRecord
+} from '../../runtime-terminal-state-records'
+import type {
+  AgentStatusIpcPayload,
+  ParsedAgentStatusPayload
+} from '../../../../shared/agent-status-types'
 import { splitFreebuffScreenUpdates } from '../../../../shared/freebuff-screen-status'
 import { OrcaRuntimeWithSerializeMainTerminalBuffer } from './terminal-buffer-operations'
 import { observeFreebuffTerminalStatus } from '../../freebuff-terminal-status'
@@ -6,6 +13,12 @@ import {
   observeCodexCapacityTerminalStatus,
   observeCodexReconnectFailure
 } from '../../codex-notice-terminal-status'
+import {
+  isTrustDialogShown,
+  observeTrustDialogScreenChange,
+  trustDialogSettledStatus,
+  trustDialogWaitingStatus
+} from '../../startup-dialog-terminal-status'
 import { DESKTOP_TERMINAL_SCROLLBACK_ROWS_DEFAULT } from '../../../../shared/terminal-scrollback-policy'
 import {
   detectAgentStatusFromTitle,
@@ -166,12 +179,7 @@ export abstract class OrcaRuntimeWithMaybeHydrateHeadlessFromRenderer extends Or
           continue
         }
         const command = this.terminalSpawnCommandsByPtyId.get(ptyId)
-        const readStatus = () => {
-          const paneKey =
-            this.getLeavesForPty(ptyId).map((leaf) => this.makeRuntimePaneKey(leaf))[0] ??
-            this.paneOfPty(pty).paneKey
-          return paneKey ? this.getAgentStatusSnapshotForPaneFn?.(paneKey)[0] : undefined
-        }
+        const readStatus = () => this.readPtyAgentStatusRow(ptyId, pty)
         // Remote hosts report status themselves, but only this runtime can settle its own dispatches.
         if (
           observeCodexReconnectFailure(state.emulator, chunk, command, pty.launchAgent, readStatus)
@@ -179,6 +187,8 @@ export abstract class OrcaRuntimeWithMaybeHydrateHeadlessFromRenderer extends Or
           this.settleLostAgentSession(ptyId)
         }
         if (!pty.connectionId) {
+          // Runs every chunk: its scan tracks when the dialog leaves the screen.
+          this.observeTrustDialogStatus(ptyId, pty, state, chunk, readStatus)
           const payload =
             observeCodexCapacityTerminalStatus(
               state.emulator,
@@ -205,5 +215,70 @@ export abstract class OrcaRuntimeWithMaybeHydrateHeadlessFromRenderer extends Or
       state.outputSequence = outputSequence
     })
     state.writeChain = completion.catch(() => {})
+  }
+
+  private readPtyAgentStatusRow(
+    ptyId: string,
+    pty: RuntimePtyWorktreeRecord
+  ): AgentStatusIpcPayload | undefined {
+    const paneKey =
+      this.getLeavesForPty(ptyId).map((leaf) => this.makeRuntimePaneKey(leaf))[0] ??
+      this.paneOfPty(pty).paneKey
+    return paneKey ? this.getAgentStatusSnapshotForPaneFn?.(paneKey)[0] : undefined
+  }
+
+  /** A sidebar projection of the blocked text agentWait already reads, never first-party agent evidence. */
+  private publishTrustDialogStatus(ptyId: string, payload: ParsedAgentStatusPayload): void {
+    this.emitTerminalAgentStatusEvents(
+      ptyId,
+      { cleanData: '', payloads: [payload], lastPayloadCleanOffset: null },
+      undefined,
+      false
+    )
+  }
+
+  private observeTrustDialogStatus(
+    ptyId: string,
+    pty: RuntimePtyWorktreeRecord,
+    state: RuntimeHeadlessTerminal,
+    chunk: string,
+    readStatus: () => AgentStatusIpcPayload | undefined
+  ): void {
+    const shown = observeTrustDialogScreenChange(state.emulator, chunk)
+    if (shown === null) {
+      return
+    }
+    if (!shown) {
+      const settled = trustDialogSettledStatus(readStatus())
+      if (settled) {
+        this.publishTrustDialogStatus(ptyId, settled)
+      }
+      return
+    }
+    const agent = this.getPaneAgentForTuiIdle(ptyId)
+    if (agent) {
+      const waiting = trustDialogWaitingStatus(agent, readStatus())
+      if (waiting) {
+        this.publishTrustDialogStatus(ptyId, waiting)
+      }
+      return
+    }
+    // An agent typed into a shell paints its dialog before the foreground-process probe names it.
+    void this.ptyForegroundAgent.refresh(ptyId).then(() => {
+      if (
+        this.ptysById.get(ptyId) !== pty ||
+        this.headlessTerminals.get(ptyId) !== state ||
+        !isTrustDialogShown(state.emulator)
+      ) {
+        return
+      }
+      const waiting = trustDialogWaitingStatus(
+        this.getPaneAgentForTuiIdle(ptyId),
+        this.readPtyAgentStatusRow(ptyId, pty)
+      )
+      if (waiting) {
+        this.publishTrustDialogStatus(ptyId, waiting)
+      }
+    })
   }
 }
