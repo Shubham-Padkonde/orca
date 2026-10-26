@@ -19,9 +19,10 @@ const TRUST_KEYWORD_CARRY_CHARS = 'trust'.length - 1
 const TRUST_DIALOG_PAINT_BYTES = 4096
 
 // A live dialog ends on its key footer with the trust choice just above; quoted dialog text in a reply does not.
-const TRUST_DIALOG_FOOTER_RE = /^(?:enter to confirm · esc to cancel|enter continue · esc quit)$/
+const TRUST_DIALOG_FOOTER_RE =
+  /^(?:enter to confirm \u00b7 esc to cancel|enter continue \u00b7 esc quit)$/
 const TRUST_DIALOG_CHOICE_RE =
-  /^(?:[❯›]\s*)?(?:\d+\.\s*)?(?:yes, i trust this folder|trust and continue)$/
+  /^(?:[\u276f\u203a]\s*)?(?:\d+\.\s*)?(?:yes, i trust this folder|trust and continue)$/
 const TRUST_DIALOG_CHOICE_ROWS = 6
 
 function isTrustDialogOnScreen(emulator: HeadlessEmulator): boolean {
@@ -41,11 +42,13 @@ function isTrustDialogOnScreen(emulator: HeadlessEmulator): boolean {
   return reason === 'agent-trust-workspace' || reason === 'codex-trust-workspace'
 }
 
-/** True/false when a folder-trust dialog appears on/leaves the screen; null when unchanged. */
+/** appeared/present/absent while a dialog is tracked; null when nothing is tracked or the frame is mid-paint. */
+export type TrustDialogScreenRead = 'appeared' | 'present' | 'absent' | null
+
 export function observeTrustDialogScreenChange(
   emulator: HeadlessEmulator,
   data: string
-): boolean | null {
+): TrustDialogScreenRead {
   let scan = scans.get(emulator)
   if (!scan) {
     scan = { pendingBytes: 0, shown: false, carry: '' }
@@ -65,11 +68,23 @@ export function observeTrustDialogScreenChange(
   }
   const onScreen = isTrustDialogOnScreen(emulator)
   scan.pendingBytes = onScreen ? 0 : scan.pendingBytes - data.length
-  if (onScreen === scan.shown) {
+  if (scan.shown) {
+    return onScreen ? 'present' : 'absent'
+  }
+  if (!onScreen) {
     return null
   }
-  scan.shown = onScreen
-  return onScreen
+  scan.shown = true
+  return 'appeared'
+}
+
+/** Forgets a tracked dialog the settled screen no longer shows; Claude repaints without sync markers, so one read is not proof. */
+export function confirmTrustDialogGone(emulator: HeadlessEmulator): boolean {
+  if (scans.get(emulator)?.shown !== true || isTrustDialogOnScreen(emulator)) {
+    return false
+  }
+  scans.delete(emulator)
+  return true
 }
 
 /** The agent left: stop reading the screen until the keyword is painted again. */
