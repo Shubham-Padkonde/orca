@@ -13,6 +13,7 @@ import {
 import { buildTerminalWaitText } from '../../terminal-wait-tail-state'
 import {
   evaluateTuiIdle,
+  outputClockAt,
   type QuietForegroundLane,
   type TuiIdleVerdict
 } from '../../tui-idle-evidence'
@@ -145,7 +146,7 @@ export class RuntimeTerminalIdlePolls {
         ready: () => buildPtyTerminalWaitResult(handle, 'tui-idle', pty),
         blocked: (reason) => buildPtyTerminalWaitBlockedResult(handle, 'tui-idle', pty, reason),
         isQuiet: (lane) =>
-          isQuietForQuiescence(pty.lastOutputAt, this.deps.quiescenceMs, lane, () =>
+          isQuietForQuiescence(outputClockAt(pty), this.deps.quiescenceMs, lane, () =>
             this.deps.hasCommandPainted(pty.ptyId)
           )
       }

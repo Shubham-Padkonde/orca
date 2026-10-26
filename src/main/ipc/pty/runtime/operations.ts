@@ -3,7 +3,10 @@ import { LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
 import type { IPtyProvider } from '../../../providers/pty-provider-contract'
 import { LocalPtyProvider } from '../../../providers/local-pty-provider'
 import { ptyOwnership } from '../provider/ownership-state'
-import { ptySizes } from '../delivery/visibility-state'
+import { ptySizes, visibleRendererPtys } from '../delivery/visibility-state'
+import { seedTerminalRestoreRecordsFromSpawnResult } from '../pane/agent-session-owners'
+import { seedHeadlessTerminalFromSpawnResult } from '../pane/terminal-spawn-restore'
+import { hideRuntimeOwnedRendererDelivery } from './spawn-hidden-delivery'
 import { rendererSerializerReadiness } from '../pane/serializer-state'
 import { getProviderForPty, localProvider, resolvePtyExecutionHost } from '../provider/registry'
 import { inspectPtyProviderProcess } from '../../../providers/pty-process-inspection'
@@ -125,21 +128,28 @@ export async function attachPtyFromRuntimeController(
   if (provider !== localProvider || provider instanceof LocalPtyProvider) {
     return false
   }
+  const hidden = !visibleRendererPtys.has(ptyId) && hideRuntimeOwnedRendererDelivery(deps, ptyId)
   try {
     const sequenceBeforeProviderAttach = deps.runtime?.getPtyOutputSequence?.(ptyId) ?? 0
     const attachResult = await provider.attach(ptyId)
-    if (attachResult?.providerSequence) {
-      deps.runtime?.synchronizePtyOutputSequenceFromProvider?.(
-        ptyId,
-        attachResult.providerSequence,
-        sequenceBeforeProviderAttach
-      )
+    if (attachResult) {
+      if (attachResult.providerSequence) {
+        deps.runtime?.synchronizePtyOutputSequenceFromProvider?.(
+          ptyId,
+          attachResult.providerSequence,
+          sequenceBeforeProviderAttach
+        )
+      }
+      // A restarted runtime has never seen this screen; an idle agent may print nothing after attach.
+      seedHeadlessTerminalFromSpawnResult(deps.runtime, attachResult, null)
+      seedTerminalRestoreRecordsFromSpawnResult(deps.runtime, attachResult)
     }
-    if (attachResult?.lastTitle) {
-      deps.runtime?.seedTerminalRestoreTail?.(ptyId, { lastTitle: attachResult.lastTitle })
-    }
+    deps.syncPtyBackgroundedDelivery?.(ptyId, 'main-attach')
     return true
   } catch {
+    if (hidden) {
+      deps.transitionSpawnHiddenRendererPtyDeliveryState?.(ptyId, false)
+    }
     return false
   }
 }

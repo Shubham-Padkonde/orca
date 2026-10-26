@@ -28,6 +28,8 @@ export function bindProviderListeners(session: PtyIpcSession): void {
     localProvider.onWriteUnavailable?.((payload) => {
       // Before the window check: a headless host has no window, only remote streams.
       publishPtyEndpointLoss(payload.id)
+      // Panes remount and re-attach themselves; main must restore its own stream for unmounted ones.
+      session.runtime?.reattachPtyAfterEndpointLoss(payload.id)
       if (
         !session.mainWindow ||
         session.mainWindow.isDestroyed() ||

@@ -190,7 +190,7 @@ export abstract class OrcaRuntimeWithRefreshPtyWorktreeRecordsWithControllerInve
           this.restoredOrchestrationAuthorityByPtyId.delete(session.id)
         }
         pty.controllerTitle = session.title?.trim() || null
-        this.reconcileSubscriberDrivenProviderAttach(session.id)
+        this.reconcileMainDaemonAttach(session.id)
       }
       // Do not serialize relay probes or let one throw abort inventory cleanup.
       if (inventoryOptions?.refreshForegroundAgents !== false) {

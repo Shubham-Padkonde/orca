@@ -980,7 +980,6 @@
 1 test-no-wall-clock:src/main/runtime/terminal-subscriber-driven-daemon-attach.test.ts
 2 test-no-wall-clock:src/main/runtime/terminal/surface/pty-pane-copies-untouched-main.test.ts
 2 test-no-wall-clock:src/main/runtime/tui-idle-claude-task-wakeup.test.ts
-12 test-no-wall-clock:src/main/runtime/tui-idle-evidence.test.ts
 18 test-no-wall-clock:src/main/runtime/tui-idle-hook-lane-runtime.test.ts
 10 test-no-wall-clock:src/main/runtime/tui-idle-hook-lane.test.ts
 4 test-no-wall-clock:src/main/runtime/tui-idle-name-only-real-pty.integration.test.ts

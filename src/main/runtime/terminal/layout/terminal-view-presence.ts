@@ -55,11 +55,28 @@ export abstract class OrcaRuntimeWithNotifyRemoteTerminalViewPresenceChanged ext
 
   /** Live local daemon sessions with no ingested bytes need attachment; existing headless state or snapshot reconciliation means attach already began. */
   protected isKnownUnattachedLocalDaemonPty(ptyId: string): boolean {
-    return this.terminalViewSubscribers.isKnownUnattachedLocal(ptyId)
+    return this.mainDaemonAttachments.isKnownUnattachedLocal(ptyId)
   }
 
-  protected reconcileSubscriberDrivenProviderAttach(ptyId: string): void {
-    this.terminalViewSubscribers.reconcileProviderAttach(ptyId)
+  /** A failed attach leaves a surviving session silent to main; waiting on it could only time out. */
+  protected assertTerminalOutputReachesMain(handle: string): void {
+    const ptyId = this.getLivePtyForHandle(handle)?.pty.ptyId
+    if (
+      ptyId &&
+      this.isKnownUnattachedLocalDaemonPty(ptyId) &&
+      !this.mainDaemonAttachments.hasPendingAttach(ptyId)
+    ) {
+      throw new Error('terminal_not_connected_since_restart')
+    }
+  }
+
+  protected reconcileMainDaemonAttach(ptyId: string): void {
+    this.mainDaemonAttachments.reconcile(ptyId)
+  }
+
+  /** The provider endpoint dropped this session's stream; restore main's attachment once it reconnects. */
+  reattachPtyAfterEndpointLoss(ptyId: string): void {
+    this.mainDaemonAttachments.reattachAfterEndpointLoss(ptyId)
   }
 
   /** Mark a raw-output viewer without transferring terminal query authority. */

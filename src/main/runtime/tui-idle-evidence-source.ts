@@ -14,10 +14,11 @@ import {
   type AgentStateVerdict
 } from './agent-state-rules/agent-state-rules-engine'
 import type { TuiIdleHookTurn } from './tui-idle-hook-lane'
-import type {
-  FirstPartyAgentStatus,
-  TuiIdleEvaluationInput,
-  TuiIdleEvidenceRecord
+import {
+  outputClockAt,
+  type FirstPartyAgentStatus,
+  type TuiIdleEvaluationInput,
+  type TuiIdleEvidenceRecord
 } from './tui-idle-evidence'
 
 /** The runtime state every tui-idle site reads its evidence from. */
@@ -61,7 +62,7 @@ function readAgentRuleVerdict(
     readScreenLines,
     readText: () => waitText().toLowerCase(),
     readTitleStatus: () => record.lastAgentStatus,
-    hasOutputClock: record.lastOutputAt !== null
+    hasOutputClock: outputClockAt(record) !== null
   })
 }
 
@@ -138,7 +139,7 @@ export function ptyTuiIdleEvidence(
         agent !== 'qoder-cn' &&
         agent !== 'hermes' &&
         source.getAdoptedPtyIdleStatus(pty) === 'idle') ||
-      isKnownReadyPromptBody(waitText(), agent, readScreen, pty.lastOutputAt !== null),
+      isKnownReadyPromptBody(waitText(), agent, readScreen, outputClockAt(pty) !== null),
     readQuietReadyBodyEvidence: () => isQuietReadyScreenBody(waitText(), agent, readScreen),
     readAgentRuleVerdict: () => readAgentRuleVerdict(agent, pty, readScreen, waitText),
     readScreenInputVeto: screenInputVetoReader(source, agent, pty.ptyId),

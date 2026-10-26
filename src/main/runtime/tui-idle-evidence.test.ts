@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { detectAgentStatusFromTitle } from '../../shared/agent-title-status'
 import { getSyntheticAgentTerminalTitle } from '../../shared/synthetic-agent-title'
 import { isTuiAgent, TUI_AGENT_CONFIG } from '../../shared/tui-agent-config'
@@ -61,6 +61,18 @@ describe('hasQuietReadyScreen', () => {
     expect(
       hasQuietReadyScreen(record({ lastOutputAt: null }), 'muse', () => true, QUIESCENCE_MS)
     ).toBe(false)
+  })
+
+  it('measures quiet from when main began receiving a stream that has printed nothing since', () => {
+    vi.useFakeTimers({ now: 100_000 })
+    try {
+      const silent = record({ lastOutputAt: null, outputObservedSince: 100_000 })
+      expect(hasQuietReadyScreen(silent, 'codex', () => true, QUIESCENCE_MS)).toBe(false)
+      vi.advanceTimersByTime(QUIESCENCE_MS)
+      expect(hasQuietReadyScreen(silent, 'codex', () => true, QUIESCENCE_MS)).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('refuses without a ready screen', () => {

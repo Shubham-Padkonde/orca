@@ -27,7 +27,13 @@ import { evaluateHookTurn, type TuiIdleHookTurn } from './tui-idle-hook-lane'
 export type TuiIdleEvidenceRecord = {
   lastAgentStatus: AgentStatus | null
   lastOutputAt: number | null
+  outputObservedSince?: number | null
   lastOscTitle?: string | null
+}
+
+/** The output clock: last output, or when main began receiving a stream that has stayed silent since. */
+export function outputClockAt(record: TuiIdleEvidenceRecord): number | null {
+  return record.lastOutputAt ?? record.outputObservedSince ?? null
 }
 
 export type FirstPartyAgentStatus = {
@@ -103,7 +109,8 @@ export function hasSustainedTitleIdle(
 
 /** Why a missing clock is not quiet: an adopted or restored pane cannot measure it. */
 function hasQuietOutput(record: TuiIdleEvidenceRecord, quiescenceMs: number): boolean {
-  return record.lastOutputAt !== null && Date.now() - record.lastOutputAt >= quiescenceMs
+  const clock = outputClockAt(record)
+  return clock !== null && Date.now() - clock >= quiescenceMs
 }
 
 /** Closed lanes require stronger rest evidence; after-paint lanes require agent output beyond shell echo; open unknown panes may settle without an output clock. */

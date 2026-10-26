@@ -2,6 +2,7 @@ import { markRuntimeOwnedHiddenRendererPty } from '../delivery/pty-hidden-delive
 import { attachingRendererViewPtys, visibleRendererPtys } from '../delivery/visibility-state'
 import { closeStartupQueryAuthorityForPty } from '../provider/registry'
 import type { RuntimePtySpawnState } from './spawn-state'
+import type { PtyRuntimeControllerDeps } from './controller-deps'
 
 // Background launches have no renderer to answer startup queries; main must own hidden-query replies.
 
@@ -65,14 +66,23 @@ export function releaseRuntimeSpawnPreSpawnHiddenMark(ctx: RuntimePtySpawnState)
 }
 
 function markRuntimeSpawnHidden(ctx: RuntimePtySpawnState, id: string): void {
-  const transition = ctx.deps.transitionSpawnHiddenRendererPtyDeliveryState
+  hideRuntimeOwnedRendererDelivery(ctx.deps, id)
+}
+
+/** Main-held streams with no view drop renderer bytes until a pane reveals them. */
+export function hideRuntimeOwnedRendererDelivery(
+  deps: Pick<PtyRuntimeControllerDeps, 'transitionSpawnHiddenRendererPtyDeliveryState'>,
+  id: string
+): boolean {
+  const transition = deps.transitionSpawnHiddenRendererPtyDeliveryState
   if (!transition) {
-    return
+    return false
   }
   // Transition first so a fresh mark still invalidates the drain policy.
   transition(id, true)
   // No renderer exists to re-mark this PTY after reload.
   markRuntimeOwnedHiddenRendererPty(id)
+  return true
 }
 
 function isAdoptedAgentSession(ensure: unknown): boolean {

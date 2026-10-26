@@ -142,7 +142,7 @@ describe('DaemonPtyAdapter (IPtyProvider)', () => {
       lastSubprocess._simulateData('preserved output')
       await new Promise((r) => setTimeout(r, 50))
 
-      await expect(adapter.attach(sessionId)).resolves.toEqual({
+      await expect(adapter.attach(sessionId)).resolves.toMatchObject({
         providerSequence: {
           value: 'preserved output'.length,
           generation: 'continued'
@@ -367,7 +367,9 @@ describe('DaemonPtyAdapter (IPtyProvider)', () => {
         )
       const legacy = new DaemonPtyAdapter({ socketPath, tokenPath, protocolVersion: 30 })
       try {
-        await expect(legacy.attach('legacy-session')).resolves.toBeUndefined()
+        await expect(legacy.attach('legacy-session')).resolves.not.toHaveProperty(
+          'providerSequence'
+        )
       } finally {
         legacy.dispose()
         request.mockRestore()
