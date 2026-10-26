@@ -61,7 +61,9 @@ export function agentLaunchSurfaceFactory(
       const sessionId = requested ?? createStructuredAgentSessionId(agent, randomUUID)
       const definition = structuredAgentRuntimeMetadata(agent)?.definition
       const supported = Object.fromEntries(
-        Object.entries(options ?? {}).filter(([key]) => definition?.restingOptions.acceptsKey(key))
+        Object.entries(narrowStructuredLaunchSeedOptions(options) ?? {}).filter(([key]) =>
+          definition?.restingOptions.acceptsKey(key)
+        )
       )
       const seeded = narrowStructuredLaunchSeedOptions(supported)
       // A client that creates chats without starting them starts this one on its first message.
