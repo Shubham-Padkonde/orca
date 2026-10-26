@@ -7,7 +7,7 @@ import {
   chatModelSupportsAutoMode,
   chatPermissionModeNeedsModelSupport,
   effectiveChatPermissionMode,
-  type AgentChatPermissionMode
+  type AgentChatPermissionChoice
 } from '../../../shared/agent-chat-permission-mode'
 import type { StructuredAgentSessionHostDeps } from './structured-agent-session-host-types'
 
@@ -36,7 +36,7 @@ async function listedAutoModeSupport(
 export async function structuredAgentSessionLaunchPermission(
   deps: Pick<StructuredAgentSessionHostDeps, 'agents' | 'modelCatalog'>,
   record: AgentSessionRecord
-): Promise<AgentChatPermissionMode | null> {
+): Promise<AgentChatPermissionChoice | null> {
   const support = agentChatPermissionModes(record.provider)
   if (!support || !deps.agents.definition(record.provider)) {
     return null
@@ -52,7 +52,7 @@ export async function structuredAgentSessionLaunchPermission(
 export function structuredAgentSessionImmediatePermission(
   deps: Pick<StructuredAgentSessionHostDeps, 'agents'>,
   record: AgentSessionRecord
-): AgentChatPermissionMode | null {
+): AgentChatPermissionChoice | null {
   const support = agentChatPermissionModes(record.provider)
   return support &&
     deps.agents.definition(record.provider) &&
@@ -76,7 +76,7 @@ export function structuredAgentSessionAttachPermission(
   context: Pick<StructuredAgentSessionAttachContext, 'deps' | 'sessions'>,
   options: { startedFor?: string },
   lock: Pick<StructuredAgentSessionAttachLock, 'wait'>
-): (record: AgentSessionRecord) => Promise<AgentChatPermissionMode | undefined> {
+): (record: AgentSessionRecord) => Promise<AgentChatPermissionChoice | undefined> {
   return async (record) =>
     structuredAgentSessionInputCompilerPermission(
       context.sessions.get(record.sessionId)?.journal,

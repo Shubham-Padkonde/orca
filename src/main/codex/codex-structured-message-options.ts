@@ -1,3 +1,7 @@
+import { pickedSkillsInText } from '../../shared/structured-agent-session-send-mutation'
+import type { AgentJournalMessageItem } from '../../shared/agent-session-journal-types'
+import type { NativeChatBlock } from '../../shared/native-chat-types'
+import type { CodexTurnHost } from './codex-structured-turn-start'
 import { waitForPromiseWithSignal } from '../../shared/abort-signal-reason'
 import { StructuredAgentSessionInputNotAdmitted } from '../native-chat/agent-session-wire/structured-agent-session-input-admission'
 import { agentSessionFailureFact } from '../../shared/agent-session-failure'
@@ -145,4 +149,29 @@ export async function prepareCodexMessageDispatch(
       session.fence === input.fence &&
       input.isCurrent?.() !== false
   }
+}
+
+export function turnInputFor(
+  host: CodexTurnHost,
+  body: AgentJournalMessageItem
+): Record<string, unknown>[] {
+  const input: Record<string, unknown>[] = []
+  let text = ''
+  for (const block of body.blocks as NativeChatBlock[]) {
+    if (block.type === 'text' && block.text.length > 0) {
+      input.push({ type: 'text', text: block.text })
+      text += `${block.text}\n`
+    } else if (block.type === 'image-ref' && block.path) {
+      input.push({ type: 'localImage', path: block.path })
+    } else if (block.type === 'image-ref' && block.url) {
+      input.push({ type: 'image', url: block.url })
+    }
+  }
+  // Unknown skill paths suppress plain $name resolution, so send only loaded files when known.
+  for (const skill of pickedSkillsInText(text, body.skills ?? [])) {
+    if (host.skillReport?.hasSkillPath(skill.path) !== false) {
+      input.push({ type: 'skill', name: skill.name, path: skill.path })
+    }
+  }
+  return input
 }

@@ -1,5 +1,5 @@
 import type { UnsentSendHold } from '../agent-session-journal/journal-unsent-send-hold'
-import type { AgentChatPermissionMode } from '../../../shared/agent-chat-permission-mode'
+import type { AgentChatPermissionChoice } from '../../../shared/agent-chat-permission-mode'
 import type { StructuredAgentSessionStartFlights } from './structured-agent-session-start-flight'
 import type { StructuredAgentSessionDeliveryOrder } from './structured-agent-session-delivery-order'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
@@ -30,7 +30,7 @@ export type StructuredAgentSessionDeliveryLoopDeps = {
   startProviderChild: (sessionId: string, startedFor: string) => StructuredAgentSessionStartClaim
   /** Retire mismatched login/permission children under serialization. */
   retireOutgrownChild: (sessionId: string, continuingId?: string) => Promise<void>
-  immediatePermission?: (sessionId: string) => AgentChatPermissionMode | null
+  immediatePermission?: (sessionId: string) => AgentChatPermissionChoice | null
   retainedWork?: (sessionId: string, continuingId: string) => boolean
   readiness: (
     sessionId: string,

@@ -1,6 +1,6 @@
 import type { StructuredAgentSessionAdmitFreshInput } from './structured-agent-session-input-admission'
 import type { AiVaultConversationCopy } from '../../../shared/ai-vault-resume-preparation'
-import type { AgentChatPermissionMode } from '../../../shared/agent-chat-permission-mode'
+import type { AgentChatPermissionChoice } from '../../../shared/agent-chat-permission-mode'
 import type {
   AgentSessionRewindFork,
   AgentSessionRewindReason,
@@ -175,7 +175,7 @@ export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & 
   stoppedAcquisition?(sessionId: string): StructuredAgentSessionAcquisitionReceipt | undefined
   permissionModeRequiresAcquisition?(
     sessionId: string,
-    mode: AgentChatPermissionMode
+    mode: AgentChatPermissionChoice
   ): boolean | undefined
   dispatch(input: {
     sessionId: string

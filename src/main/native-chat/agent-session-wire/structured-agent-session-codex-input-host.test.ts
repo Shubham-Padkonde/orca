@@ -119,7 +119,9 @@ beforeEach(async () => {
         launch.resumeThreadId ??
         store.getRecord(identity.sessionId)?.providerHandleChain.at(-1)?.handle.nativeId ??
         null,
-      permissionPolicy: codexStructuredPermissionPolicy(permissionMode ?? 'ask')
+      ...(permissionMode === 'own'
+        ? {}
+        : { permissionPolicy: codexStructuredPermissionPolicy(permissionMode ?? 'ask') })
     }),
     onDispatchSettledLate: (settlement) => void host.settleLateDispatch(settlement),
     onEvent: (event) => {
@@ -310,6 +312,13 @@ it.each(['config', 'order', 'initial'] as const)(
     expect(answered).toBe(false)
     turns.start()
     turns.echo(id)
+    await vi.waitFor(() =>
+      expect(host.readStatusSummary(SESSION)?.runtimePermission).toEqual({
+        fence: replacement.fence,
+        mode: 'ask'
+      })
+    )
+    expect((await host.readOptions(SESSION)).current.reportedPermissionMode).toBe('ask')
     expect(submission((await settled)?.value)).toMatchObject({
       dispatchState: 'accepted',
       fence: replacement.fence
@@ -460,6 +469,9 @@ it('preserves successful steering and only current retained work can inherit unk
     expect(codex.connections[0]?.calls.some((r) => r.method === 'turn/steer')).toBe(true)
   )
   turns.echo(steer)
+  await vi.waitFor(() =>
+    expect(host.readStatusSummary(SESSION)?.runtimePermission?.mode).toBe('full-access')
+  )
   turns.end('completed')
   await host.flushStreamedEvents(SESSION)
   retained = true
@@ -468,6 +480,10 @@ it('preserves successful steering and only current retained work can inherit unk
   expect(starts()[1]?.params).not.toHaveProperty('sandboxPolicy')
   expect(codex.connections).toHaveLength(1)
   await began(busy)
+  await vi.waitFor(() =>
+    expect(host.readStatusSummary(SESSION)?.runtimePermission?.mode).toBe('full-access')
+  )
+  expect((await host.readOptions(SESSION)).current.reportedPermissionMode).toBe('full-access')
   turns.end('completed')
   await host.flushStreamedEvents(SESSION)
   retained = false

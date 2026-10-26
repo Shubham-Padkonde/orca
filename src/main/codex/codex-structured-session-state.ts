@@ -30,7 +30,7 @@ import type {
 } from '../native-chat/agent-model-catalog/agent-model-catalog-store'
 import type { StructuredAgentSessionProviderOpen } from '../native-chat/agent-session-wire/structured-agent-session-provider-open-contract'
 import type { NativeChatVisualsLaunch } from '../native-chat/native-chat-visuals-delivery'
-import type { AgentChatPermissionMode } from '../../shared/agent-chat-permission-mode'
+import type { AgentChatPermissionChoice } from '../../shared/agent-chat-permission-mode'
 import type { CodexSandboxPolicy } from './codex-structured-sandbox-policy'
 import type { StructuredAgentSessionEventSink } from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
 
@@ -147,12 +147,12 @@ export type CodexSession = {
   historyMode?: 'legacy' | 'paginated'
   /** Provider facts from this acquisition, not another copy of the chat's selected mode. */
   permissions?: {
-    acquiredMode: AgentChatPermissionMode
+    acquiredMode: AgentChatPermissionChoice
     acquiredSandbox?: CodexSandboxPolicy
     launchSandboxIntact: boolean
     cwd: string
     visualsFolder?: string
-    preparedMode?: AgentChatPermissionMode
+    preparedMode?: AgentChatPermissionChoice
     preparedAuto?: CodexSandboxPolicy
   }
   /** Wire-observed open primary turns; rewind and untargeted Stop use these before journal admission. */
@@ -163,7 +163,9 @@ export type CodexSession = {
   dispatchPending?: boolean
   prompts: CodexAcquisitionWindow['prompts']
   options: Map<string, string>
+  /** Startup reports and accepted fresh-turn policies describe this child, never saved intent. */
   reportedOptions: {
+    reportedPermissionMode?: string | null
     model?: string
     effort?: string
     serviceTier?: string | null

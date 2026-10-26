@@ -1,6 +1,6 @@
 import type { AgentSessionDispatchOutcome } from './structured-agent-session-adapter'
 import type { AgentJournalMessageItem } from '../../../shared/agent-session-journal-types'
-import type { AgentChatPermissionMode } from '../../../shared/agent-chat-permission-mode'
+import type { AgentChatPermissionChoice } from '../../../shared/agent-chat-permission-mode'
 
 export type StructuredAgentSessionInputAdmission =
   | { kind: 'prepare' }
@@ -10,7 +10,7 @@ export type StructuredAgentSessionInputAdmission =
 /** The synchronous writer runs under host ordering; its response is awaited outside it. */
 export type StructuredAgentSessionAdmitFreshInput = (
   enqueue: (
-    mode: AgentChatPermissionMode,
+    mode: AgentChatPermissionChoice,
     inheritRunning: boolean,
     body?: AgentJournalMessageItem
   ) => StructuredAgentSessionInputAdmission,

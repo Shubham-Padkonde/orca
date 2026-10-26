@@ -2,7 +2,8 @@ import {
   StructuredAgentSessionInputNotAdmitted,
   type StructuredAgentSessionAdmitFreshInput
 } from '../native-chat/agent-session-wire/structured-agent-session-input-admission'
-import { pickedSkillsInText } from '../../shared/structured-agent-session-send-mutation'
+import { turnInputFor } from './codex-structured-message-options'
+import { reportedCodexPermissionMode } from './codex-structured-thread-open'
 import { admitCodexTurnPermission } from './codex-structured-turn-permission'
 import type { CodexSkillReport } from './codex-structured-skill-report'
 import type { AgentSessionAccountKind } from '../../shared/agent-session-availability'
@@ -11,7 +12,6 @@ import type {
   AgentJournalMessageItem,
   AgentJournalTurnJoin
 } from '../../shared/agent-session-journal-types'
-import type { NativeChatBlock } from '../../shared/native-chat-types'
 import type { AgentSessionDispatchOutcome } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 import { isCodexAppServerRequestError } from './app-server/codex-app-server-request-error'
 import type { CodexAppServerConnection } from './app-server/codex-app-server-connection-types'
@@ -76,31 +76,6 @@ export type CodexTurnHost = {
   /** Running turns whose interrupt Codex already answered: aborted, so never steered. */
   abortedTurnIds?: ReadonlySet<string>
   turnOpenWaits: Pick<CodexTurnOpenWaits, 'wait'>
-}
-
-function turnInputFor(
-  host: CodexTurnHost,
-  body: AgentJournalMessageItem
-): Record<string, unknown>[] {
-  const input: Record<string, unknown>[] = []
-  let text = ''
-  for (const block of body.blocks as NativeChatBlock[]) {
-    if (block.type === 'text' && block.text.length > 0) {
-      input.push({ type: 'text', text: block.text })
-      text += `${block.text}\n`
-    } else if (block.type === 'image-ref' && block.path) {
-      input.push({ type: 'localImage', path: block.path })
-    } else if (block.type === 'image-ref' && block.url) {
-      input.push({ type: 'image', url: block.url })
-    }
-  }
-  // Unknown skill paths suppress plain $name resolution, so send only loaded files when known.
-  for (const skill of pickedSkillsInText(text, body.skills ?? [])) {
-    if (host.skillReport?.hasSkillPath(skill.path) !== false) {
-      input.push({ type: 'skill', name: skill.name, path: skill.path })
-    }
-  }
-  return input
 }
 
 /** Explicit steering avoids pre-0.148 turn/start replies naming nonexistent turns; overrides wait for a start. */
@@ -194,17 +169,29 @@ export async function startCodexTurn(
     enqueued = true
     return {
       kind: 'sent' as const,
-      response: host.connection.request(
-        'turn/start',
-        {
-          threadId: host.threadId,
-          clientUserMessageId: input.clientMessageId,
-          input: turnInputFor(host, body),
-          ...permission,
-          ...codexTurnRequestOptions(host)
-        },
-        { timeoutMs: input.timeoutMs, onReply: input.onReply }
-      )
+      response: host.connection
+        .request(
+          'turn/start',
+          {
+            threadId: host.threadId,
+            clientUserMessageId: input.clientMessageId,
+            input: turnInputFor(host, body),
+            ...permission,
+            ...codexTurnRequestOptions(host)
+          },
+          { timeoutMs: input.timeoutMs, onReply: input.onReply }
+        )
+        .then((answer) => {
+          const applied = reportedCodexPermissionMode({
+            ...permission,
+            sandbox: permission.sandboxPolicy
+          })
+          // Successful fresh-turn policy is applied evidence, not a provider readback.
+          if (applied && host.reportedOptions) {
+            host.reportedOptions.reportedPermissionMode = applied
+          }
+          return answer
+        })
     }
   }
   let answer: unknown

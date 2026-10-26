@@ -5,7 +5,7 @@ import {
   type StructuredAgentSessionAdmitFreshInput,
   type StructuredAgentSessionInputAdmission
 } from '../native-chat/agent-session-wire/structured-agent-session-input-admission'
-import type { AgentChatPermissionMode } from '../../shared/agent-chat-permission-mode'
+import type { AgentChatPermissionChoice } from '../../shared/agent-chat-permission-mode'
 import type { CodexSession } from './codex-structured-session-state'
 import { readCodexAutoSandbox } from './codex-structured-auto-sandbox'
 import { codexStructuredPermissionPolicy } from './codex-structured-permission-policy'
@@ -19,7 +19,7 @@ type PermissionHost = {
 /** Prepared outside the host serialize so a configuration request never holds up accepting sends. */
 export async function prepareCodexTurnPermission(
   session: PermissionHost,
-  mode: AgentChatPermissionMode,
+  mode: AgentChatPermissionChoice,
   signal?: AbortSignal
 ): Promise<void> {
   const state = session.permissions
@@ -39,7 +39,7 @@ export async function prepareCodexTurnPermission(
 
 export function codexPermissionRequiresAcquisition(
   session: PermissionHost,
-  mode: AgentChatPermissionMode
+  mode: AgentChatPermissionChoice
 ): boolean {
   const state = session.permissions
   return (
@@ -52,9 +52,12 @@ export function codexPermissionRequiresAcquisition(
 
 export function codexTurnPermission(
   session: PermissionHost,
-  mode: AgentChatPermissionMode,
+  mode: AgentChatPermissionChoice,
   inheritRunning = false
 ): { approvalPolicy?: string; approvalsReviewer?: string; sandboxPolicy?: CodexSandboxPolicy } {
+  if (mode === 'own') {
+    return {}
+  }
   const state = session.permissions
   const { approvalPolicy, approvalsReviewer, sandbox } = codexStructuredPermissionPolicy(mode)
   const sandboxPolicy: CodexSandboxPolicy | undefined =

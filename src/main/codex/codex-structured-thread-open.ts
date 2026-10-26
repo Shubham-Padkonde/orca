@@ -9,6 +9,7 @@ import { readCodexSandboxPolicy, type CodexSandboxPolicy } from './codex-structu
 
 export type CodexOpenedThread = {
   threadId: string
+  reportedPermissionMode?: string | null
   supersededThreadId?: string
   thread?: Record<string, unknown>
   historyMode?: 'legacy' | 'paginated'
@@ -133,6 +134,7 @@ export async function openCodexThread(
   const sandbox = readCodexSandboxPolicy(result.sandbox)
   return {
     threadId,
+    reportedPermissionMode: reportedCodexPermissionMode(result),
     ...(supersededThreadId === undefined ? {} : { supersededThreadId }),
     thread,
     ...(thread.historyMode === 'legacy' || thread.historyMode === 'paginated'
@@ -143,4 +145,41 @@ export async function openCodexThread(
     ...(sandbox ? { sandbox } : {}),
     ...(serviceTierKnown ? { serviceTier } : {})
   }
+}
+
+/** Unrecognized policies remain the agent's settings rather than a guessed Orca mode. */
+export function reportedCodexPermissionMode(reply: Record<string, unknown>): string | null {
+  const approval = reply.approvalPolicy ?? reply.approval_policy
+  const reviewer = reply.approvalsReviewer ?? reply.approvals_reviewer
+  const sandbox = reply.sandbox
+  const sandboxType =
+    typeof sandbox === 'object' && sandbox !== null && 'type' in sandbox ? sandbox.type : sandbox
+  const readOnly = sandboxType === 'readOnly' || sandboxType === 'read-only'
+  const workspace = sandboxType === 'workspaceWrite' || sandboxType === 'workspace-write'
+  const full = sandboxType === 'dangerFullAccess' || sandboxType === 'danger-full-access'
+  if (approval === 'on-request' && reviewer === 'user' && readOnly) {
+    return 'ask'
+  }
+  if (approval === 'on-request' && reviewer === 'auto_review' && workspace) {
+    return 'auto'
+  }
+  if (approval === 'never' && reviewer === 'user' && full) {
+    return 'full-access'
+  }
+  if (sandboxType === 'readOnly' || sandboxType === 'read-only') {
+    return 'read-only'
+  }
+  if (
+    (sandboxType === 'dangerFullAccess' || sandboxType === 'danger-full-access') &&
+    approval === 'never'
+  ) {
+    return 'full-access'
+  }
+  if (
+    (sandboxType === 'workspaceWrite' || sandboxType === 'workspace-write') &&
+    approval === 'on-request'
+  ) {
+    return reviewer === 'auto_review' ? 'auto' : reviewer === 'user' ? 'ask' : null
+  }
+  return null
 }
