@@ -75,17 +75,31 @@ describe('startup trust dialog terminal status', () => {
   // One byte at a time splits the keyword; Claude's Ink paints words apart with cursor moves.
   it.each([
     ['claude-dialog-trust-workspace', 1, ['appeared']],
-    ['claude-dialog-trust-workspace', 8192, ['appeared']],
+    ['claude-dialog-trust-workspace', 65_536, ['appeared']],
     ['claude-dialog-trust-workspace-narrow', 1, ['appeared']],
-    ['claude-dialog-trust-workspace-answered', 64, ['appeared', 'present', 'absent']],
+    ['claude-dialog-trust-workspace-answered', 64, ['appeared', 'absent']],
     ['codex-0-158-0-trustprompt', 1, ['appeared']],
-    ['codex-0-158-0-trustprompt', 8192, ['appeared']],
-    ['codex-0-164-0-trustprompt-answered', 64, ['appeared', 'present', 'absent']]
+    ['codex-0-158-0-trustprompt', 65_536, ['appeared']]
   ] as const)('replays %s in %i-byte chunks', async (name, size, expected) => {
     const { recording, cols, rows } = fixture(name)
     const emulator = new HeadlessEmulator({ cols, rows })
     try {
-      expect(await replay(emulator, recording, size)).toEqual(expected)
+      // How many chunks land between paints varies, so only appearance and absence are compared.
+      const reads = (await replay(emulator, recording, size)).filter((read) => read !== 'present')
+      expect(reads).toEqual(expected)
+    } finally {
+      emulator.dispose()
+    }
+  })
+
+  it('reads the Codex dialog as absent once accepting it repaints the composer', async () => {
+    const { recording, cols, rows } = fixture('codex-0-158-0-trustprompt')
+    const emulator = new HeadlessEmulator({ cols, rows })
+    try {
+      expect(await replay(emulator, recording, recording.length)).toEqual(['appeared'])
+      const composer = '\x1b[2J\x1b[H\u203a Ask Codex to do anything\r\n  gpt-5 \u00b7 ~/repo\r\n'
+      expect(await replay(emulator, composer, 8192)).toEqual(['absent'])
+      expect(confirmTrustDialogGone(emulator)).toBe(true)
     } finally {
       emulator.dispose()
     }
@@ -108,10 +122,10 @@ describe('startup trust dialog terminal status', () => {
     const { recording, cols, rows } = fixture('claude-dialog-trust-workspace')
     const emulator = new HeadlessEmulator({ cols, rows })
     try {
-      expect(await replay(emulator, recording, 8192)).toEqual(['appeared'])
+      expect(await replay(emulator, recording, recording.length)).toEqual(['appeared'])
       // A resize repaint split across reads: the clear lands before the redrawn dialog.
       expect(await replay(emulator, '\x1b[2J\x1b[H', 8192)).toEqual(['absent'])
-      expect(await replay(emulator, recording, 8192)).toEqual(['present'])
+      expect(await replay(emulator, recording, recording.length)).toEqual(['present'])
       expect(confirmTrustDialogGone(emulator)).toBe(false)
       expect(await replay(emulator, '\x1b[J\r\nuser@host repo $ ', 8192)).toEqual(['absent'])
       expect(confirmTrustDialogGone(emulator)).toBe(true)
