@@ -2,6 +2,7 @@ import { getPtyIpc } from '../pty-host-bindings'
 import type { OrcaRuntimeService } from '../../../runtime/orca-runtime'
 import { tryGetProviderForPty } from '../provider/registry'
 import { providerSnapshotRequiredPtys } from '../delivery/visibility-state'
+import { disarmEscapeResumeForSnapshot } from '../delivery/pty-hidden-drop-escape-resume'
 import type { PtyPendingDataDrainQueue } from '../delivery/pty-pending-data-drain-queue'
 import {
   getPtyRendererDeliveryDebugSnapshot,
@@ -66,6 +67,9 @@ export function installPtySnapshotIpcHandlers(deps: {
           (await runtime.serializeHiddenOutputRecoveryBuffer(args.id, {
             scrollbackRows
           }))
+        if (snapshot) {
+          disarmEscapeResumeForSnapshot(args.id)
+        }
         if (!snapshot || typeof snapshot.seq !== 'number') {
           return snapshot
         }

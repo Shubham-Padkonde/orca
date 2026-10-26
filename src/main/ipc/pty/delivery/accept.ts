@@ -18,6 +18,10 @@ import { shouldSendInteractiveOutputNow } from './interactive'
 import { requestDeliveryResyncForGatedPty } from './accounting'
 import { warnIfDroppingHiddenBytesForVisiblePty } from './debug-snapshot'
 import { clearFlushTimerIfIdle } from './flush'
+import {
+  observeRendererBoundPtyData,
+  takeOrphanedEscapeContinuationLength
+} from './pty-hidden-drop-escape-resume'
 import type { PtyIpcSession } from '../session'
 
 export function rendererPtyIsKnownHidden(id: string): boolean {
@@ -34,9 +38,6 @@ export function acceptPtyDataForRenderer(
   },
   outputSeq: number | undefined
 ): void {
-  const rawLength = payload.sequenceChars ?? payload.data.length
-  const preservesSeq = !payload.transformed && rawLength === payload.data.length
-  const startSeq = typeof outputSeq === 'number' ? Math.max(0, outputSeq - rawLength) : undefined
   if (!session.mainWindow || session.mainWindow.isDestroyed()) {
     if (session.flushTimer) {
       clearTimeout(session.flushTimer)
@@ -54,6 +55,7 @@ export function acceptPtyDataForRenderer(
   if (session.rendererExitingPtyIds.has(payload.id)) {
     return
   }
+  observeRendererBoundPtyData(payload.id, payload.data)
   if (shouldDropHiddenRendererPtyData(payload.id, session.getSettings?.())) {
     const droppedChars = payload.data.length
     const drop = recordHiddenRendererPtyDataDrop(payload.id, droppedChars)
@@ -69,6 +71,21 @@ export function acceptPtyDataForRenderer(
     }
     return
   }
+  const orphanedEscapeChars = takeOrphanedEscapeContinuationLength(payload.id, payload.data)
+  if (orphanedEscapeChars > 0) {
+    // The model already holds these bytes; the renderer must resume at a clean parser state.
+    const fullRawLength = payload.sequenceChars ?? payload.data.length
+    payload = {
+      ...payload,
+      data: payload.data.slice(orphanedEscapeChars),
+      ...(!payload.transformed && fullRawLength === payload.data.length
+        ? { sequenceChars: fullRawLength - orphanedEscapeChars }
+        : {})
+    }
+  }
+  const rawLength = payload.sequenceChars ?? payload.data.length
+  const preservesSeq = !payload.transformed && rawLength === payload.data.length
+  const startSeq = typeof outputSeq === 'number' ? Math.max(0, outputSeq - rawLength) : undefined
   if (payload.data.length === 0 && !payload.transformed) {
     return
   }
