@@ -16,6 +16,7 @@ const contracts = [
   'src/main/runtime/rpc/methods/repo.test.ts',
   'src/renderer/src/components/tab-bar/use-new-tab-agent-menu-host-preferences.test.tsx',
   'src/main/sqlite/sync-database.test.ts',
+  'src/main/runtime/orchestration/run-binding-performance.test.ts',
   'src/main/runtime/orchestration/db/row-column-lists.test.ts',
   'src/shared/native-chat/tools/native-chat-tool-attribution-allocation.test.ts',
   'src/shared/native-chat/tools/native-chat-tool-pairing.performance.test.ts',
