@@ -227,6 +227,8 @@ export const electronViteConfig: UserConfig = {
         preserveEntrySignatures: 'exports-only',
         // Electron and sidecar launchers require stable CommonJS paths despite Rolldown’s SSR ESM default.
         output: {
+          // V8 stores a whole script as UTF-16 when any char is above U+00FF; escaping keeps sources one-byte (half the memory).
+          charset: 'ascii',
           format: 'cjs',
           entryFileNames: '[name].js',
           chunkFileNames: 'chunks/[name]-[hash].js'
@@ -260,6 +262,10 @@ export const electronViteConfig: UserConfig = {
     build: {
       externalizeDeps: {
         exclude: ['zod']
+      },
+      rollupOptions: {
+        // Unminified preload keeps dependency JSDoc whose em dashes would force two-byte storage in every renderer.
+        output: { charset: 'ascii', comments: { legal: true, annotation: true, jsdoc: false } }
       }
     }
   },
@@ -284,7 +290,10 @@ export const electronViteConfig: UserConfig = {
       createViteCacheRetentionPlugin()
     ],
     worker: {
-      format: 'es'
+      format: 'es',
+      rollupOptions: {
+        output: { charset: 'ascii' }
+      }
     },
     build: {
       manifest: true,
@@ -296,6 +305,7 @@ export const electronViteConfig: UserConfig = {
       rollupOptions: {
         // Shared chunks must not import HTML entries that mount another React root.
         preserveEntrySignatures: 'strict',
+        output: { charset: 'ascii' },
         input: {
           index: resolve('src/renderer/index.html'),
           popout: resolve('src/renderer/popout.html'),

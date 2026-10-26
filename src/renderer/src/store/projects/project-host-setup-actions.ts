@@ -82,9 +82,7 @@ export function createProjectHostSetupActions(
           const nextProjects = s.endpointProjects.some((entry) => entry.id === project.id)
             ? s.endpointProjects.map((entry) => (entry.id === project.id ? project : entry))
             : [...s.endpointProjects, project]
-          const nextSetups = s.endpointProjectHostSetups.some((entry) => entry.id === setup.id)
-            ? s.endpointProjectHostSetups.map((entry) => (entry.id === setup.id ? setup : entry))
-            : [...s.endpointProjectHostSetups, setup]
+          const nextSetups = upsertProjectHostSetup(s.endpointProjectHostSetups, setup)
           return {
             repos: nextRepos,
             endpointProjects: nextProjects,
