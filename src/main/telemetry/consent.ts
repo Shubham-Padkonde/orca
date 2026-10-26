@@ -6,6 +6,10 @@ import type { TelemetryConsentState } from '../../shared/telemetry-consent-types
 // Retain pending-banner vs explicit-disabled reasons for UI; shared types cross IPC while this re-export preserves main callers.
 export type ConsentState = TelemetryConsentState
 
+export function shouldOptOutSdkAtInit(consent: ConsentState): boolean {
+  return consent.effective === 'disabled'
+}
+
 const CI_ENV_VARS = [
   'CI',
   'GITHUB_ACTIONS',

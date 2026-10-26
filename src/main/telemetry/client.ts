@@ -9,10 +9,11 @@ import type { Store } from '../persistence'
 import { consumeBurstToken, resetBurstCapsForSession } from './burst-cap'
 import { getCohortAtEmit } from './cohort-classifier'
 import { resolveConsent } from './consent'
-import { buildCommonProps, createPostHogClient, waitForCaptureEnqueue } from './posthog-transport'
+import { buildCommonProps } from './session-properties'
+import { DeferredTelemetryTransport } from './deferred-transport'
 import { commonPropsSchema, validate } from './validator'
 
-export { shouldOptOutSdkAtInit } from './posthog-transport'
+export { shouldOptOutSdkAtInit } from './consent'
 
 // Compile-time feature flag, independent of the build-identity gate — both must be satisfied to transmit.
 // NOTE: config/scripts/verify-telemetry-constants.mjs greps `const TELEMETRY_ENABLED = true|false`; keep that shape or update its regex.
@@ -32,11 +33,21 @@ const IS_OFFICIAL_BUILD: boolean =
   typeof WRITE_KEY === 'string' &&
   WRITE_KEY.length > 0
 
-let posthog: PostHog | null = null
 let sessionId: string | null = null
 let commonProps: CommonProps | null = null
 let shuttingDown = false
 let storeRef: Store | null = null
+const transport = new DeferredTelemetryTransport(
+  () =>
+    !IS_OFFICIAL_BUILD || !TELEMETRY_ENABLED || !WRITE_KEY || !commonProps || !storeRef
+      ? null
+      : { writeKey: WRITE_KEY, consent: resolveConsent(storeRef.getSettings()) },
+  (captures) => {
+    if (captures.some((capture) => capture.event === 'app_opened')) {
+      appOpenedTrackedThisSession = false
+    }
+  }
+)
 
 let testTransportEnabled = false
 
@@ -49,6 +60,8 @@ export function initTelemetry(store: Store): void {
 
   // Retain Store even for contributor builds so opt-out persists.
   storeRef = store
+  transport.reset()
+  commonProps = null
   resetBurstCapsForSession()
   shuttingDown = false
   // Reset banner/app-open gating each launch, not once per install.
@@ -80,10 +93,11 @@ export function initTelemetry(store: Store): void {
   if (!parsedCommon.success) {
     console.warn('[telemetry] common props failed schema validation; skipping transport init')
     commonProps = null
-    return
   }
+}
 
-  posthog = createPostHogClient(WRITE_KEY, resolveConsent(settings))
+export function startTelemetryTransport(): Promise<void> {
+  return transport.start()
 }
 
 /** Lets producers avoid preparing usage payloads when transmission is disabled. */
@@ -91,7 +105,7 @@ export function isTelemetryEnabled(): boolean {
   return (
     (testTransportEnabled || (IS_OFFICIAL_BUILD && TELEMETRY_ENABLED)) &&
     !shuttingDown &&
-    posthog !== null &&
+    transport.accepting &&
     commonProps !== null &&
     storeRef !== null &&
     resolveConsent(storeRef.getSettings()).effective === 'enabled'
@@ -118,7 +132,7 @@ export function track<N extends EventName>(name: N, props: EventProps<N>): boole
   if (shuttingDown) {
     return false
   }
-  if (!posthog || !commonProps || !storeRef || posthog.optedOut) {
+  if (!commonProps || !storeRef || transport.client?.optedOut) {
     return false
   }
 
@@ -174,7 +188,7 @@ export function track<N extends EventName>(name: N, props: EventProps<N>): boole
       : {}
 
   // Node SDK requires per-capture person-profile suppression.
-  posthog.capture({
+  const capture: Parameters<PostHog['capture']>[0] = {
     distinctId: commonProps.install_id,
     event: name,
     properties: {
@@ -183,7 +197,10 @@ export function track<N extends EventName>(name: N, props: EventProps<N>): boole
       ...mainOwnedProps,
       $process_person_profile: false
     }
-  })
+  }
+  if (!transport.capture(capture)) {
+    return false
+  }
   if (dashboardActiveSurface && settings.telemetry) {
     trackedDashboardActiveDays.set(dashboardActiveSurface, dashboardActiveDay)
     try {
@@ -219,8 +236,9 @@ export async function setOptIn(via: OptInVia, optedIn: boolean): Promise<void> {
     { notifyListeners: true }
   )
 
-  const client = posthog
   if (optedIn) {
+    await startTelemetryTransport()
+    const client = transport.client
     if (client) {
       await client.optIn()
     }
@@ -228,6 +246,8 @@ export async function setOptIn(via: OptInVia, optedIn: boolean): Promise<void> {
     trackAppOpenedOnce()
     track('telemetry_opted_in', { via })
   } else {
+    transport.discardPending()
+    const client = transport.client
     if (!client) {
       return
     }
@@ -237,6 +257,7 @@ export async function setOptIn(via: OptInVia, optedIn: boolean): Promise<void> {
         const validated = validate('telemetry_opted_out', { via })
         if (validated.ok) {
           const uuid = randomUUID()
+          const { waitForCaptureEnqueue } = await import('./posthog-transport')
           const enqueued = waitForCaptureEnqueue(client, 'telemetry_opted_out', uuid)
           client.capture({
             distinctId: commonProps.install_id,
@@ -277,8 +298,9 @@ export async function persistBannerAcknowledgeWithoutEmitting(): Promise<void> {
     },
     { notifyListeners: true }
   )
-  if (posthog) {
-    await posthog.optIn()
+  await startTelemetryTransport()
+  if (transport.client) {
+    await transport.client.optIn()
   }
   // Banner resolution is first app_opened eligibility; re-enable SDK before capture.
   trackAppOpenedOnce()
@@ -295,21 +317,11 @@ export function trackAppOpenedOnce(): void {
 export async function shutdownTelemetry(): Promise<void> {
   // Fence before flushing so late IPC cannot enqueue.
   shuttingDown = true
-  const instance = posthog
-  if (!instance) {
-    return
-  }
-  try {
-    // Bound quit delay to two seconds.
-    await instance.shutdown(2_000)
-  } catch (err) {
-    // Telemetry failure must never prevent quit.
-    console.warn('[telemetry] shutdown error (ignored):', err)
-  }
+  await transport.shutdown()
 }
 
 export function _setPostHogClientForTests(client: PostHog | null): void {
-  posthog = client
+  transport.client = client
 }
 
 export function _setCommonPropsForTests(props: CommonProps | null): void {

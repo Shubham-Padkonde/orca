@@ -54,8 +54,10 @@ vi.mock('../agent-hooks/hook-status-session-tabs-republish', () => ({
 }))
 vi.mock('../telemetry/client', () => ({
   initTelemetry: () => {},
+  startTelemetryTransport: async () => {},
   track: () => {}
 }))
+vi.mock('./first-window-deferral', () => ({ runAfterFirstWindowShown: () => {} }))
 vi.mock('../codex/codex-trust-grant-telemetry', () => ({
   setCodexTrustGrantTelemetry: () => {}
 }))

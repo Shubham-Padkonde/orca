@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { initTelemetry, track } from './client'
+import { initTelemetry, startTelemetryTransport, track } from './client'
 import { cleanupTelemetryClientTest, setupTelemetryClientTest } from './client-test-harness'
 
 const { capture } = vi.hoisted(() => {
@@ -19,7 +19,7 @@ afterEach(() => capture.mockClear())
 describe('onboarding language cohort on analytics', () => {
   it.each(['control', 'treatment', undefined] as const)(
     'attaches %s to completion and activation events without changing consent',
-    (cohort) => {
+    async (cohort) => {
       const state = setupTelemetryClientTest({
         optedIn: true,
         installId: 'test-install',
@@ -28,6 +28,7 @@ describe('onboarding language cohort on analytics', () => {
       })
       try {
         initTelemetry(state.store)
+        await startTelemetryTransport()
         track('onboarding_completed', { path: 'open_folder', total_duration_ms: 1000 })
         track('activation_checklist_item_completed', {
           item: 'ranFirstAgent',

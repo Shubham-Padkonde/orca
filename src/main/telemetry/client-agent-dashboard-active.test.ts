@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { initTelemetry, track } from './client'
+import { _setCommonPropsForTests, initTelemetry, track } from './client'
 import {
   cleanupTelemetryClientTest,
+  BASE_COMMON,
   setupTelemetryClientTest,
   type TelemetryClientTestState
 } from './client-test-harness'
@@ -58,6 +59,7 @@ describe('Agent Dashboard daily visible use', () => {
   it('preserves the daily limit across restarts without consuming the event budget on repeats', () => {
     track('agent_dashboard_active', { surface: 'popout' })
     initTelemetry(state.store)
+    _setCommonPropsForTests(BASE_COMMON)
     for (let index = 0; index < 1500; index++) {
       expect(track('agent_dashboard_active', { surface: 'popout' })).toBe(false)
     }

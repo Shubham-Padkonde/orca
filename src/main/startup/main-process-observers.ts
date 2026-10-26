@@ -10,7 +10,7 @@ import {
 } from '../notifications/desktop-presence-reporter'
 import { agentHookServer } from '../agent-hooks/server'
 import { installHookStatusSessionTabsRepublish } from '../agent-hooks/hook-status-session-tabs-republish'
-import { initTelemetry, track } from '../telemetry/client'
+import { initTelemetry, startTelemetryTransport, track } from '../telemetry/client'
 import { setCodexTrustGrantTelemetry } from '../codex/codex-trust-grant-telemetry'
 import { initObservability } from '../observability'
 import { recordDurableCrashBreadcrumb } from '../crash-reporting/durable-crash-breadcrumb'
@@ -27,6 +27,7 @@ import { OpenCodeUsageStore } from '../opencode-usage/store'
 import { MuseUsageStore } from '../muse-usage/store'
 import { installRepoMaintenanceIdleGate } from '../repo-maintenance-idle-gate'
 import { mainProcessState as state } from './main-process-state'
+import { runAfterFirstWindowShown } from './first-window-deferral'
 
 export function initializeMainProcessObservers(): void {
   const store = state.store
@@ -80,6 +81,11 @@ export function initializeMainProcessObservers(): void {
   }
   // Initialize before IPC/renderers can track; the telemetry client gates dev/disabled cases itself.
   initTelemetry(store)
+  runAfterFirstWindowShown(() => {
+    void startTelemetryTransport().catch((error) => {
+      console.warn('[telemetry] transport initialization failed:', error)
+    })
+  }, 15_000)
   const profileStateStartup = state.profileStateStartup
   if (profileStateStartup) {
     track('profile_state_authority_selected', {
