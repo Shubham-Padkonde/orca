@@ -154,8 +154,7 @@ export function MountedBottomDrawer({
       }
     }
 
-    // Seed fill sheets (autoFocus may precede listeners) and page sheets (focus moving under an open keyboard sends no show event).
-    // Native content sheets skip it: metrics go stale after an inner dismiss, and their own Modal window gets a fresh show or drops the IME.
+    // Seed fill sheets (autoFocus may precede listeners) and page sheets (focus moving under an open IME sends no event); native content sheets own a Modal window, where stale metrics would stick.
     if (fillAvailable || Platform.OS === 'web') {
       const existing = currentSoftKeyboardHeight()
       if (existing > 0) {

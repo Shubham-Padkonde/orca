@@ -105,7 +105,10 @@ function sheetStyle(renderer: ReactTestRenderer): Record<string, unknown> {
 }
 
 describe('a sheet on the page', () => {
-  afterEach(() => setWindowHeight(RESTING_HEIGHT))
+  afterEach(() => {
+    publishShellKeyboardSource(null)
+    setWindowHeight(RESTING_HEIGHT)
+  })
 
   it('mounts against react-native-web, whose Keyboard has no metrics()', () => {
     setWindowHeight(RESTING_HEIGHT)
@@ -149,13 +152,9 @@ describe('a sheet on the page', () => {
 
   it('lifts a content-sized sheet over a keyboard already up, which sends no new event', () => {
     publishShellKeyboardSource({ read: () => IME_HEIGHT, subscribe: () => () => {} })
-    try {
-      setWindowHeight(RESTING_HEIGHT)
-      const renderer = renderSheet(false)
-      expect(sheetStyle(renderer).transform).toEqual([{ translateY: -IME_HEIGHT }])
-      act(() => renderer.unmount())
-    } finally {
-      publishShellKeyboardSource(null)
-    }
+    setWindowHeight(RESTING_HEIGHT)
+    const renderer = renderSheet(false)
+    expect(sheetStyle(renderer).transform).toEqual([{ translateY: -IME_HEIGHT }])
+    act(() => renderer.unmount())
   })
 })
