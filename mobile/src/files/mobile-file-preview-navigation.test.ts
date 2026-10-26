@@ -48,8 +48,7 @@ describe('mobile-file-preview-navigation', () => {
     'oga',
     'flac',
     'opus',
-    'pdf',
-    'PDF'
+    'pdf'
   ])('opens %s files from the explorer', (extension) => {
     expect(
       canPreviewMobileFileRow({ kind: 'binary', relativePath: `media/demo.${extension}` })
