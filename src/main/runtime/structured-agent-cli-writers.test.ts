@@ -7,6 +7,7 @@ import type { SleepingAgentSessionRecord } from '../../shared/agent-session-resu
 import type { EnrichedAgentHookEventPayload } from '../agent-hooks/server/server-types'
 import {
   assertCliConversationWritersExited,
+  posixCliWriterShellAlone,
   type CliWriterHost
 } from './structured-agent-cli-writers'
 import { OrcaRuntimeService } from './orca-runtime'
@@ -95,6 +96,25 @@ function writerLayoutStore(): RuntimeStore {
 
 beforeEach(() => vi.clearAllMocks())
 describe('execution-host conversation writer inspection', () => {
+  it('looks through the macOS login wrapper to the shell it started', async () => {
+    // Captured from a real macOS pane: login(1) stays as the shell's parent.
+    const wrapped = [
+      {
+        pid: 10,
+        ppid: 1,
+        stat: 'Ss',
+        command: '/usr/bin/login -flpq user /bin/bash --noprofile --norc -p -c orca-tcc-login'
+      },
+      { pid: 11, ppid: 10, stat: 'S+', command: '-/bin/zsh -l' }
+    ]
+    snapshot.mockResolvedValue(wrapped)
+    await expect(posixCliWriterShellAlone(10)).resolves.toBe(true)
+    snapshot.mockResolvedValue([...wrapped, { pid: 12, ppid: 11, stat: 'S+', command: 'claude' }])
+    await expect(posixCliWriterShellAlone(10)).resolves.toBe(false)
+    snapshot.mockResolvedValue([wrapped[0], { ...wrapped[1], command: 'claude' }])
+    await expect(posixCliWriterShellAlone(10)).resolves.toBe(false)
+  })
+
   it('accepts exact exited or unchanged shell-only proof, never loss of evidence', async () => {
     await expect(inspection('unverifiable').run()).rejects.toMatchObject(refusal)
     for (const cause of ['missing-row', 'sleeping', 'failed-scan', 'unknown-topology'] as const) {
