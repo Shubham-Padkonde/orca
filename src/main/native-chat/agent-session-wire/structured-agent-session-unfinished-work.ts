@@ -61,6 +61,7 @@ export function unfinishedStructuredAgentSessionWorkWasInterrupted(
       .some(
         (send) =>
           heldSends?.has(send.clientMessageId) &&
+          !finalizingStructuredAgentSessionInput(journal, send.clientMessageId) &&
           send.fence === exit?.ownerFence &&
           !isQueuedAgentJournalSubmission(send) &&
           (send.dispatchState === 'pending' || send.dispatchState === 'unknown')

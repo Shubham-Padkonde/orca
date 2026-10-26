@@ -229,6 +229,62 @@ async function began(id: string) {
   await vi.waitFor(async () => expect(await row(id)).toMatchObject({ dispatchState: 'accepted' }))
 }
 
+it('keeps only the original pre-send result when a ready child exits during Auto preparation', async () => {
+  await pick('ask')
+  await began(await permissionSend('completed warm turn'))
+  turns.end('completed')
+  await host.flushStreamedEvents(SESSION)
+  const { sessions } = host.collaboratorsForTests()
+  const journal = sessions.get(SESSION)!.journal
+  const warm = journal.snapshot().items.find((item) => item.body.kind === 'turn')!
+  expect(warm.body).toMatchObject({ state: 'completed', outcome: 'success' })
+  const child = sessions.get(SESSION)!.child!
+  expect(child.phase).toBe('ready')
+  const preparation = Promise.withResolvers<unknown>()
+  const read = vi.fn(() => preparation.promise)
+  codex.routes['config/read'] = read
+  await pick('auto')
+  const id = await permissionSend('preserve this unsent original')
+  const waiting = host.waitForSendSettlement(SESSION, id)
+  try {
+    await vi.waitFor(() => expect(read).toHaveBeenCalledOnce())
+    expect(adapter.heldSends(SESSION)).toContain(id)
+    expect(finalizingStructuredAgentSessionInput(journal, id)).toBe(true)
+    expect(journal.submission(id)).toMatchObject({ dispatchState: 'pending', fence: child.fence })
+    expect(starts()).toHaveLength(1)
+    codex.connections[0]!.handlers.onExit?.(new Error('ready Codex exited during preparation'), {
+      expected: false
+    })
+    await codexInputFinalizationFixture().waitForInputFinalization(journal, id)
+    const result = submission((await waiting)?.value)
+    expect(result).toMatchObject({
+      clientMessageId: id,
+      dispatchState: 'rejected',
+      rejection: { kind: 'providerExited', neverReachedAgent: true },
+      providerItemId: null,
+      answeredInTurn: null
+    })
+    expect(result).toEqual(journal.submission(id))
+    expect(journal.itemBody(agentJournalSubmissionKey(id))).toEqual(
+      hostTestMessage('preserve this unsent original')
+    )
+    await vi.waitFor(() => expect(sessions.get(SESSION)?.child).toBeNull())
+    await host.flushStreamedEvents(SESSION)
+    const snapshot = await host.journalSnapshot(SESSION)
+    expect(snapshot.items.find((item) => item.itemId === warm.itemId)).toEqual(warm)
+    expect(
+      snapshot.items.filter(
+        (item) => item.body.kind === 'status' && item.body.failure?.kind === 'providerExited'
+      )
+    ).toEqual([])
+    expect(starts()).toHaveLength(1)
+    expect(codex.connections).toHaveLength(1)
+  } finally {
+    preparation.resolve(config)
+    await host.flushAllStreamedEvents()
+  }
+})
+
 it.each(['config', 'order', 'initial'] as const)(
   'acquires idle late Auto after the %s wait before writing once',
   async (wait) => {
