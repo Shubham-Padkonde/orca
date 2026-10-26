@@ -11,7 +11,14 @@ export function getAgentResumeArgv(
     case 'codebuddy':
       return providerSession.key === 'session_id' ? ['codebuddy', '--resume', id] : null
     case 'claude':
-      return providerSession.key === 'session_id' ? ['claude', '--resume', id] : null
+      return providerSession.key === 'session_id'
+        ? [
+            'claude',
+            ...(providerSession.effort ? ['--effort', providerSession.effort] : []),
+            '--resume',
+            id
+          ]
+        : null
     case 'cursor':
       return providerSession.key === 'conversation_id' ? ['cursor-agent', '--resume', id] : null
     case 'codex':
@@ -72,6 +79,8 @@ export function getAgentResumeArgv(
       return providerSession.key === 'session_id' ? ['jcode', '--resume', id] : null
     case 'kiro':
       return providerSession.key === 'session_id' ? ['kiro-cli', '--resume-id', id] : null
+    case 'hermes':
+      return providerSession.key === 'session_id' ? ['hermes', '--resume', id] : null
   }
 }
 
