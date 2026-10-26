@@ -3,7 +3,8 @@ import { LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
 import type { IPtyProvider } from '../../../providers/pty-provider-contract'
 import { LocalPtyProvider } from '../../../providers/local-pty-provider'
 import { ptyOwnership } from '../provider/ownership-state'
-import { ptySizes, visibleRendererPtys } from '../delivery/visibility-state'
+import { isRendererViewShowingPty, ptySizes } from '../delivery/visibility-state'
+import { isHiddenRendererPty } from '../delivery/pty-hidden-delivery-gate'
 import { seedTerminalRestoreRecordsFromSpawnResult } from '../pane/agent-session-owners'
 import { seedHeadlessTerminalFromSpawnResult } from '../pane/terminal-spawn-restore'
 import { hideRuntimeOwnedRendererDelivery } from './spawn-hidden-delivery'
@@ -128,18 +129,22 @@ export async function attachPtyFromRuntimeController(
   if (provider !== localProvider || provider instanceof LocalPtyProvider) {
     return false
   }
-  const hidden = !visibleRendererPtys.has(ptyId) && hideRuntimeOwnedRendererDelivery(deps, ptyId)
+  // Only a mark this attach set may be undone; a pane's own hidden claim stays.
+  const hidden =
+    !isRendererViewShowingPty(ptyId) &&
+    !isHiddenRendererPty(ptyId) &&
+    hideRuntimeOwnedRendererDelivery(deps, ptyId)
   try {
     const sequenceBeforeProviderAttach = deps.runtime?.getPtyOutputSequence?.(ptyId) ?? 0
     const attachResult = await provider.attach(ptyId)
+    if (attachResult?.providerSequence) {
+      deps.runtime?.synchronizePtyOutputSequenceFromProvider?.(
+        ptyId,
+        attachResult.providerSequence,
+        sequenceBeforeProviderAttach
+      )
+    }
     if (attachResult) {
-      if (attachResult.providerSequence) {
-        deps.runtime?.synchronizePtyOutputSequenceFromProvider?.(
-          ptyId,
-          attachResult.providerSequence,
-          sequenceBeforeProviderAttach
-        )
-      }
       // A restarted runtime has never seen this screen; an idle agent may print nothing after attach.
       seedHeadlessTerminalFromSpawnResult(deps.runtime, attachResult, null)
       seedTerminalRestoreRecordsFromSpawnResult(deps.runtime, attachResult)

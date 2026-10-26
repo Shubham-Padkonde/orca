@@ -220,7 +220,7 @@ export abstract class OrcaRuntimeWithActivateManagedWorktree extends OrcaRuntime
       signal
     }: { requireComposerMarker?: boolean; stopOnDialog?: boolean; signal?: AbortSignal } = {}
   ): Promise<RuntimeTerminalWait> {
-    this.assertTerminalOutputReachesMain(handle)
+    await this.attachTerminalOutputToMain(handle)
     const initialPtyId =
       this.getLivePtyForHandle(handle)?.pty.ptyId ?? this.getLiveLeafForHandle(handle).leaf.ptyId
     const stop = new AbortController()

@@ -58,16 +58,17 @@ export abstract class OrcaRuntimeWithNotifyRemoteTerminalViewPresenceChanged ext
     return this.mainDaemonAttachments.isKnownUnattachedLocal(ptyId)
   }
 
-  /** A failed attach leaves a surviving session silent to main; waiting on it could only time out. */
-  protected assertTerminalOutputReachesMain(handle: string): void {
+  /** Null when main already receives the terminal; else attaches it, rejecting if it cannot, since a wait could only time out. */
+  protected attachTerminalOutputToMain(handle: string): Promise<void> | null {
     const ptyId = this.getLivePtyForHandle(handle)?.pty.ptyId
-    if (
-      ptyId &&
-      this.isKnownUnattachedLocalDaemonPty(ptyId) &&
-      !this.mainDaemonAttachments.hasPendingAttach(ptyId)
-    ) {
-      throw new Error('terminal_not_connected_since_restart')
-    }
+    const attaching = ptyId ? this.mainDaemonAttachments.ensureAttached(ptyId) : null
+    return (
+      attaching?.then((attached) => {
+        if (!attached) {
+          throw new Error('terminal_not_connected_since_restart')
+        }
+      }) ?? null
+    )
   }
 
   protected reconcileMainDaemonAttach(ptyId: string): void {

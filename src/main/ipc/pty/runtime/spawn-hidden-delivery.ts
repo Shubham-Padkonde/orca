@@ -1,5 +1,5 @@
 import { markRuntimeOwnedHiddenRendererPty } from '../delivery/pty-hidden-delivery-gate'
-import { attachingRendererViewPtys, visibleRendererPtys } from '../delivery/visibility-state'
+import { attachingRendererViewPtys, isRendererViewShowingPty } from '../delivery/visibility-state'
 import { closeStartupQueryAuthorityForPty } from '../provider/registry'
 import type { RuntimePtySpawnState } from './spawn-state'
 import type { PtyRuntimeControllerDeps } from './controller-deps'
@@ -43,7 +43,7 @@ export function commitRuntimeSpawnHiddenDelivery(ctx: RuntimePtySpawnState): voi
   if (attaching) {
     attaching.skippedHide = true
   }
-  if (visibleRendererPtys.has(id) || attaching) {
+  if (isRendererViewShowingPty(id)) {
     releaseRuntimeSpawnPreSpawnHiddenMark(ctx)
     ctx.deps.syncPtyBackgroundedDelivery?.(id, 'spawn')
     return

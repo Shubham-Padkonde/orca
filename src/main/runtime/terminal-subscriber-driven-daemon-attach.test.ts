@@ -453,7 +453,18 @@ describe('subscriber-driven daemon attach (never-activated tab)', () => {
     expect(model.emitData(PTY_ID, 'after loss\r\n')).toBe(true)
   })
 
-  it('fails a wait at once when main could not attach the surviving session', async () => {
+  it('fails a wait at once when main cannot attach the surviving session', async () => {
+    const { runtime, model, handle } = setupNeverAttachedDaemonSession({ snapshotCapable: false })
+    // The daemon refuses an attach-only request for a session it does not own.
+    model.sessions.delete(PTY_ID)
+
+    await expect(
+      runtime.waitForTerminal(handle, { condition: 'tui-idle', timeoutMs: 60_000 })
+    ).rejects.toThrow('terminal_not_connected_since_restart')
+    expect(model.attachCalls).toEqual([PTY_ID])
+  })
+
+  it('retries a refused attach when a wait arrives, instead of failing the wait', async () => {
     const { runtime, model, handle } = setupNeverAttachedDaemonSession({ snapshotCapable: false })
     const refuse = model.deferNextAttach(false)
     await internals(runtime).refreshPtyWorktreeRecordsWithControllerInventory([], null)
@@ -463,8 +474,10 @@ describe('subscriber-driven daemon attach (never-activated tab)', () => {
     )
 
     await expect(
-      runtime.waitForTerminal(handle, { condition: 'tui-idle', timeoutMs: 60_000 })
-    ).rejects.toThrow('terminal_not_connected_since_restart')
+      runtime.waitForTerminal(handle, { condition: 'tui-idle', timeoutMs: 50 })
+    ).rejects.toThrow('timeout')
+    expect(model.attachCalls).toEqual([PTY_ID, PTY_ID])
+    expect(model.emitData(PTY_ID, 'attached on retry\r\n')).toBe(true)
   })
 
   it('does not subscriber-attach or provider-read a session this app already spawned', async () => {

@@ -3,6 +3,7 @@ import { setupPtyIpcSuite } from '../pty-ipc-test-harness'
 import { PtyWriteUnavailableError } from '../../providers/pty-write-unavailable-error'
 import { TERMINAL_INPUT_CHUNK_MAX_BYTES } from '../../../shared/terminal-input'
 import { registerPtyHandlers } from './register-handlers'
+import { rendererVisibilityKnownPtys } from './delivery/visibility-state'
 import { subscribeToPtyEndpointLoss } from '../../runtime/terminal/pty-endpoint-loss-signal'
 
 vi.mock('electron', () => import('../pty-ipc-mock-registry').then((m) => m.electronModuleMock()))
@@ -114,7 +115,7 @@ describe('pty:writeUnavailable renderer-liveness guard', () => {
   })
 
   describe('the daemon-death fan-out', () => {
-    function installProviderCapturingFanout(): (payload: { id: string }) => void {
+    function installProviderCapturingFanout(runtime?: unknown): (payload: { id: string }) => void {
       let fanout: ((payload: { id: string }) => void) | null = null
       installDaemonTestProvider({
         onWriteUnavailable: vi.fn((callback: (payload: { id: string }) => void) => {
@@ -122,7 +123,7 @@ describe('pty:writeUnavailable renderer-liveness guard', () => {
           return () => {}
         })
       })
-      registerPtyHandlers(mainWindow as never)
+      registerPtyHandlers(mainWindow as never, runtime as never)
       if (!fanout) {
         throw new Error('registerPtyHandlers did not subscribe to onWriteUnavailable')
       }
@@ -137,6 +138,23 @@ describe('pty:writeUnavailable renderer-liveness guard', () => {
       expect(mainWindow.webContents.send).toHaveBeenCalledWith('pty:writeUnavailable', {
         id: 'pane-1'
       })
+    })
+
+    it('re-attaches in main only the sessions no mounted pane will restore', () => {
+      const reattachPtyAfterEndpointLoss = vi.fn()
+      const fanout = installProviderCapturingFanout({
+        setPtyController: vi.fn(),
+        reattachPtyAfterEndpointLoss
+      })
+      rendererVisibilityKnownPtys.add('pane-1')
+      try {
+        fanout({ id: 'pane-1' })
+        fanout({ id: 'unmounted-1' })
+      } finally {
+        rendererVisibilityKnownPtys.delete('pane-1')
+      }
+
+      expect(reattachPtyAfterEndpointLoss.mock.calls).toEqual([['unmounted-1']])
     })
 
     it('stays silent when the WebContents is destroyed under a live window', () => {

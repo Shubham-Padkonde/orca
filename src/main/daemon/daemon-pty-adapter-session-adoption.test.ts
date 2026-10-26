@@ -367,9 +367,13 @@ describe('DaemonPtyAdapter (IPtyProvider)', () => {
         )
       const legacy = new DaemonPtyAdapter({ socketPath, tokenPath, protocolVersion: 30 })
       try {
-        await expect(legacy.attach('legacy-session')).resolves.not.toHaveProperty(
-          'providerSequence'
-        )
+        const attached = await legacy.attach('legacy-session')
+        expect(attached).toMatchObject({
+          id: 'legacy-session',
+          isReattach: true,
+          incarnationId: 'legacy-attach-incarnation'
+        })
+        expect(attached.providerSequence).toBeUndefined()
       } finally {
         legacy.dispose()
         request.mockRestore()

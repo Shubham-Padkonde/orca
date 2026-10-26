@@ -13,7 +13,6 @@ export class RuntimeTerminalViewSubscribers {
 
   constructor(private readonly deps: RuntimeTerminalViewSubscriberDependencies) {}
 
-  // Why: exit drops subscribers only; attach/publish state survives until the respawn advances the generation.
   clearSubscribers(ptyId: string): void {
     this.remoteCounts.delete(ptyId)
     this.pausableRemoteViews.delete(ptyId)

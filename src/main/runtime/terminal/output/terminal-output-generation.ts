@@ -96,7 +96,7 @@ export abstract class OrcaRuntimeWithRecordAgentPromptLifecycleState extends Orc
     this.agentPromptExplicitStatusFloorByPtyId.set(ptyId, Date.now())
     this.legacyWorkerRecovery.deleteRecoveredPty(ptyId)
     // Why: a respawn under the same session id needs its own main attach.
-    this.mainDaemonAttachments.resetGeneration(ptyId)
+    this.mainDaemonAttachments.forget(ptyId)
     const pty = this.ptysById.get(ptyId)
     if (pty) {
       pty.outputObservedSince = null

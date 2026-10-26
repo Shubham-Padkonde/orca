@@ -162,18 +162,7 @@ export abstract class OrcaRuntimeWithFitOverrideListeners extends OrcaRuntimeWit
     },
     attachProvider: (ptyId) => {
       const attach = this.ptyController?.attach
-      if (!attach) {
-        return null
-      }
-      return (async () => {
-        const attached = await attach(ptyId)
-        const pty = attached ? this.ptysById.get(ptyId) : undefined
-        // An idle agent may print nothing after attach; from now on its silence is observed.
-        if (pty && pty.lastOutputAt === null) {
-          pty.outputObservedSince = Date.now()
-        }
-        return attached
-      })()
+      return attach ? (async () => attach(ptyId))() : null
     }
   })
 

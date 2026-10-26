@@ -225,6 +225,14 @@ export abstract class OrcaRuntimeWithSerializeMainTerminalBuffer extends OrcaRun
       })
   }
 
+  /** A reattached live process may print nothing; from now on its silence is observed quiet. */
+  startReattachedOutputClock(ptyId: string): void {
+    const pty = this.ptysById.get(ptyId)
+    if (pty && pty.lastOutputAt === null) {
+      pty.outputObservedSince ??= Date.now()
+    }
+  }
+
   // Restore RPC bytes bypass onPtyData; seed read/list state without waiters, orchestration events or fresh-output clocks.
   seedTerminalRestoreTail(ptyId: string, restore: { text?: string; lastTitle?: string }): void {
     const seed = restore.text ? buildRestoredTerminalTailSeed(restore.text) : null
