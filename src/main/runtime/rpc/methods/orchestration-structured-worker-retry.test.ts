@@ -13,6 +13,8 @@ import {
   releaseStructuredWorkerSession
 } from './orchestration-structured-worker-session'
 import { deliverWorkerDispatchPreamble } from './orchestration/worker/deliver-worker-dispatch-preamble'
+import { tearDownFailedWorkerStart } from './orchestration/worker/failed-worker-start-teardown'
+import { structuredWorkerIdentities } from '../../structured-worker-identity'
 import { rpcContext, runtimeStub } from './agent-launch.test-fixture'
 
 let rig: RestTestRig
@@ -44,7 +46,7 @@ afterEach(async () => {
   vi.useRealTimers()
 })
 
-it('starts only for its agent-sourced preamble and observes it after a transient open failure', async () => {
+async function createWorker() {
   const workerRuntime = {
     ...runtimeStub(),
     resolveStructuredAgentSessionCreateIntent: async (params: { envelope: unknown }) => ({
@@ -64,7 +66,9 @@ it('starts only for its agent-sourced preamble and observes it after a transient
     publishStructuredAgentSessionTab: async () => {},
     getNestedWorkerMaxDepth: () => 2,
     getTerminalOrchestrationCliCommand: () => 'orca',
-    orchestrationSenderNames: { nameOf: () => 'Coordinator' }
+    orchestrationSenderNames: { nameOf: () => 'Coordinator' },
+    forgetStructuredSessionMail: vi.fn(),
+    retireStructuredAgentSessionTabFromSnapshot: vi.fn(() => true)
   }
   const runtime = rpcContext(workerRuntime, {}).runtime
   const created = await createStructuredWorkerSession({
@@ -74,27 +78,34 @@ it('starts only for its agent-sourced preamble and observes it after a transient
     dispatchId: 'dispatch-retry',
     onJournalActivity: () => {}
   })
+  const deliverPreamble = () =>
+    deliverWorkerDispatchPreamble({
+      runtime,
+      db,
+      structuredSession: created,
+      terminalHandle: created.identity.handle,
+      dispatchId: 'dispatch-retry',
+      dispatchDepth: 1,
+      runId: 'run-retry',
+      taskId: 'task-retry',
+      taskSpec: 'fix the build',
+      coordinatorHandle: 'term_coordinator',
+      devMode: false,
+      requestId: 'request-retry',
+      readinessTimeoutMs: 2000
+    })
+  return { runtime, created, workerRuntime, deliverPreamble }
+}
+
+it('starts only for its agent-sourced preamble and observes it after a transient open failure', async () => {
+  const { created, deliverPreamble } = await createWorker()
   const sessionId = created.identity.sessionId
   expect(rig.adapter.acquire).not.toHaveBeenCalled()
   expect((await rig.host.journalSnapshot(sessionId)).submissions).toEqual([])
   vi.spyOn(rig.host.deps.adapter, 'open').mockRejectedValueOnce(
     new CodexAppServerRequestError('initialize', -32603, 'temporarily unavailable')
   )
-  const result = await deliverWorkerDispatchPreamble({
-    runtime,
-    db,
-    structuredSession: created,
-    terminalHandle: created.identity.handle,
-    dispatchId: 'dispatch-retry',
-    dispatchDepth: 1,
-    runId: 'run-retry',
-    taskId: 'task-retry',
-    taskSpec: 'fix the build',
-    coordinatorHandle: 'term_coordinator',
-    devMode: false,
-    requestId: 'request-retry',
-    readinessTimeoutMs: 2000
-  })
+  const result = await deliverPreamble()
   expect(result.structuredTurnStart).toEqual({ verdict: 'observed' })
   expect(rig.adapter.acquire).toHaveBeenCalledTimes(2)
   expect(rig.adapter.dispatch).toHaveBeenCalledOnce()
@@ -117,4 +128,31 @@ it('starts only for its agent-sourced preamble and observes it after a transient
     }
   })
   expect(snapshot.items.filter((item) => item.body.kind === 'status')).toEqual([])
+})
+
+it('reports a preamble as undelivered after startup exhaustion and retires the failed worker', async () => {
+  const { runtime, created, workerRuntime, deliverPreamble } = await createWorker()
+  const sessionId = created.identity.sessionId
+  expect(rig.store.listVisibleSessionIds()).toContain(sessionId)
+  vi.spyOn(rig.host.deps.adapter, 'open').mockRejectedValue(
+    new CodexAppServerRequestError('initialize', -32603, 'temporarily unavailable')
+  )
+  await expect(deliverPreamble()).rejects.toMatchObject({ code: 'dispatch_preamble_undelivered' })
+  expect(rig.adapter.acquire).toHaveBeenCalledTimes(5)
+  expect(rig.adapter.dispatch).not.toHaveBeenCalled()
+  const snapshot = await rig.host.journalSnapshot(sessionId)
+  expect(snapshot.submissions).toHaveLength(1)
+  expect(snapshot.submissions).toMatchObject([
+    { dispatchState: 'rejected', source: { kind: 'agent' } }
+  ])
+  await tearDownFailedWorkerStart({
+    runtime,
+    structuredSession: created,
+    dispatchId: 'dispatch-retry'
+  })
+  expect(structuredWorkerIdentities.getBySessionId(sessionId)).toBeNull()
+  expect(rig.host.hasSession(sessionId)).toBe(false)
+  expect(rig.store.listVisibleSessionIds()).not.toContain(sessionId)
+  expect(workerRuntime.forgetStructuredSessionMail).toHaveBeenCalledWith(sessionId)
+  expect(workerRuntime.retireStructuredAgentSessionTabFromSnapshot).toHaveBeenCalledWith(sessionId)
 })

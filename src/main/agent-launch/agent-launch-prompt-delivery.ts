@@ -13,15 +13,22 @@ import type { CreatedSurface } from './agent-launch-executor'
 import type { AgentLaunchSurfaceExecution } from './agent-launch-execution'
 import type { AgentLaunchStructuredSurface } from './agent-launch-surface-factories'
 
+function structuredLaunchSubmitText(intent: Pick<AgentLaunchIntent, 'prompt'>): string | undefined {
+  return intent.prompt?.delivery === 'submit' && intent.prompt.text.trim().length > 0
+    ? intent.prompt.text
+    : undefined
+}
+
 export function launchPromptCreateInputs(
   intent: Pick<AgentLaunchIntent, 'prompt'>,
   signal?: AbortSignal
 ): { firstMessage?: StructuredAgentSessionFirstMessage; signal?: AbortSignal } {
-  return intent.prompt?.delivery === 'submit'
+  const text = structuredLaunchSubmitText(intent)
+  return text !== undefined
     ? {
         firstMessage: {
           clientMessageId: createStructuredAgentSessionOperationId(randomUUID),
-          body: structuredAgentSessionSendBody(intent.prompt.text, [])
+          body: structuredAgentSessionSendBody(text, [])
         },
         ...(signal ? { signal } : {})
       }
@@ -39,6 +46,9 @@ export function settledAtCreation(
 ): AgentLaunchPromptDisposal {
   if (created.structured?.firstMessage) {
     return { outcome: 'journaled', messageId: created.structured.firstMessage.clientMessageId }
+  }
+  if (created.structured) {
+    return structuredLaunchSubmitText(intent) === undefined ? NOT_DELIVERED : UNCONFIRMED
   }
   if (created.promptRodeLaunchCommand) {
     return HANDED_TO_TERMINAL

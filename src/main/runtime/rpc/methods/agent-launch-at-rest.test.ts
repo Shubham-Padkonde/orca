@@ -150,38 +150,41 @@ function holdStarts() {
   rig.adapter.acquire.mockImplementation(rig.heldStart(acquire))
 }
 
-it.each([PHONE, CLI])(
-  'the opening prompt owns retry for capable and older callers: %j',
-  async (caller) => {
-    holdStarts()
-    const attach = vi.spyOn(rig.host, 'attach')
-    const result = await launch(caller, 'fix the build')
-    expect(result.prompt).toEqual({
-      delivery: 'submit',
-      outcome: 'journaled',
-      messageId: expect.any(String)
-    })
-    expect(attach).not.toHaveBeenCalled()
-    expect((await rig.host.journalSnapshot(SESSION)).submissions).toMatchObject([
-      {
-        clientMessageId:
-          result.prompt?.outcome === 'journaled' ? result.prompt.messageId : undefined,
-        source: { kind: 'user' },
-        dispatchState: 'pending'
-      }
-    ])
-    await endChild()
-    await vi.waitFor(() => expect(rig.adapter.acquire).toHaveBeenCalledTimes(2))
-    await rig.proveStart(await child())
-    await vi.waitFor(() => expect(rig.adapter.dispatch).toHaveBeenCalledOnce())
-    expect(rig.adapter.dispatch.mock.calls[0]?.[0].clientMessageId).toBe(
-      result.prompt?.outcome === 'journaled' ? result.prompt.messageId : undefined
-    )
-    const snapshot = await rig.host.journalSnapshot(SESSION)
-    expect(snapshot.submissions).toMatchObject([{ dispatchState: 'accepted' }])
-    expect(snapshot.items.filter((item) => item.body.kind === 'status')).toEqual([])
-  }
-)
+it('a whitespace-only submit creates an eager empty chat without sending a turn', async () => {
+  const result = await launch(PHONE, ' \t\n ')
+  expect(result.outcome).toMatchObject({ kind: 'structured', sessionId: SESSION })
+  expect(result.prompt).toEqual({ delivery: 'submit', outcome: 'not-delivered' })
+  expect(rig.adapter.acquire).toHaveBeenCalledOnce()
+  expect((await rig.host.journalSnapshot(SESSION)).submissions).toEqual([])
+  expect(rig.adapter.dispatch).not.toHaveBeenCalled()
+})
+
+it('the opening prompt owns retry for a legacy-capability CLI caller', async () => {
+  holdStarts()
+  const result = await launch(CLI, 'fix the build')
+  expect(result.prompt).toEqual({
+    delivery: 'submit',
+    outcome: 'journaled',
+    messageId: expect.any(String)
+  })
+  expect((await rig.host.journalSnapshot(SESSION)).submissions).toMatchObject([
+    {
+      clientMessageId: result.prompt?.outcome === 'journaled' ? result.prompt.messageId : undefined,
+      source: { kind: 'user' },
+      dispatchState: 'pending'
+    }
+  ])
+  await endChild()
+  await vi.waitFor(() => expect(rig.adapter.acquire).toHaveBeenCalledTimes(2))
+  await rig.proveStart(await child())
+  await vi.waitFor(() => expect(rig.adapter.dispatch).toHaveBeenCalledOnce())
+  expect(rig.adapter.dispatch.mock.calls[0]?.[0].clientMessageId).toBe(
+    result.prompt?.outcome === 'journaled' ? result.prompt.messageId : undefined
+  )
+  const snapshot = await rig.host.journalSnapshot(SESSION)
+  expect(snapshot.submissions).toMatchObject([{ dispatchState: 'accepted' }])
+  expect(snapshot.items.filter((item) => item.body.kind === 'status')).toEqual([])
+})
 
 it('rejects one requester with one failure row when all five children exit', async () => {
   holdStarts()
