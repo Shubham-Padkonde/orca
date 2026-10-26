@@ -161,7 +161,7 @@ describe('codex structured launch resolution', () => {
       codexHome: '/home/work/.codex',
       resumeThreadId: null,
       permissionPolicy: {
-        approvalPolicy: 'untrusted',
+        approvalPolicy: 'on-request',
         sandbox: 'read-only',
         approvalsReviewer: 'user'
       },
@@ -249,7 +249,7 @@ describe('codex structured launch resolution', () => {
   })
 
   it.each([
-    ['ask', { approvalPolicy: 'untrusted', sandbox: 'read-only', approvalsReviewer: 'user' }],
+    ['ask', { approvalPolicy: 'on-request', sandbox: 'read-only', approvalsReviewer: 'user' }],
     [
       'auto',
       { approvalPolicy: 'on-request', sandbox: 'workspace-write', approvalsReviewer: 'auto_review' }
@@ -283,7 +283,7 @@ describe('codex structured launch resolution', () => {
       '--dangerously-bypass-approvals-and-sandbox'
     ])({ identity: IDENTITY, spawnToken: TEST_SPAWN_TOKEN, permissionMode: 'ask' })
 
-    expect(launch.permissionPolicy).toMatchObject({ approvalPolicy: 'untrusted' })
+    expect(launch.permissionPolicy).toMatchObject({ approvalPolicy: 'on-request' })
   })
 
   it('opens the thread on the model the record saved', async () => {

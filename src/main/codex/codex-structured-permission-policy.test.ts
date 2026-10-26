@@ -6,7 +6,7 @@ const FULL_ACCESS = {
   sandbox: 'danger-full-access',
   approvalsReviewer: 'user'
 }
-const ASK = { approvalPolicy: 'untrusted', sandbox: 'read-only', approvalsReviewer: 'user' }
+const ASK = { approvalPolicy: 'on-request', sandbox: 'read-only', approvalsReviewer: 'user' }
 
 describe('codexStructuredPermissionPolicy', () => {
   it('maps Full access to no prompts and no sandbox', () => {

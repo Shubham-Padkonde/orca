@@ -74,7 +74,7 @@ it('rereads the host choice after preparation and keeps the exact configured Aut
     configuration.resolve({ config: { sandbox_workspace_write: workspace } })
     expect(await sending).toMatchObject({ state: 'admitted' })
     expect(connection.calls.at(-1)?.params).toMatchObject({
-      approvalPolicy: 'untrusted',
+      approvalPolicy: 'on-request',
       approvalsReviewer: 'user',
       sandboxPolicy: { type: 'readOnly' }
     })
@@ -217,7 +217,7 @@ it.each(['accepted', 'refused', 'transport'] as const)(
         expect(connection.calls.some((call) => call.method === 'turn/start')).toBe(true)
       )
       expect(connection.calls.find((call) => call.method === 'turn/start')?.params).toMatchObject({
-        approvalPolicy: 'untrusted',
+        approvalPolicy: 'on-request',
         sandboxPolicy: { type: 'readOnly' }
       })
       startTurn(connection, 'applied-turn')

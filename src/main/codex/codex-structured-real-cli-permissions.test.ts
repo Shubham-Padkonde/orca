@@ -86,7 +86,7 @@ function effectivePolicy(mode: AgentChatPermissionMode) {
       }
     : mode === 'ask'
       ? {
-          approvalPolicy: 'untrusted',
+          approvalPolicy: 'on-request',
           sandbox: { type: 'readOnly' },
           approvalsReviewer: 'user'
         }

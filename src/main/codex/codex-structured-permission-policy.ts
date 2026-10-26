@@ -13,7 +13,7 @@ export type CodexStructuredPermissionPolicy =
       approvalsReviewer: CodexApprovalsReviewer
     }
   | {
-      approvalPolicy: 'untrusted'
+      approvalPolicy: 'on-request'
       sandbox: 'read-only'
       approvalsReviewer: CodexApprovalsReviewer
     }
@@ -27,7 +27,7 @@ const FULL_ACCESS_POLICY = {
 // Explicit fields prevent inheriting permissive config or previous thread policies.
 /** Workspace writes need approval even when the user's configured sandbox permits them. */
 const ASK_POLICY = {
-  approvalPolicy: 'untrusted',
+  approvalPolicy: 'on-request',
   sandbox: 'read-only',
   approvalsReviewer: 'user'
 } as const

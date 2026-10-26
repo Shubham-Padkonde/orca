@@ -670,7 +670,7 @@ export function registerCodexInputFinalization(current: typeof codexInputFinaliz
           clientUserMessageId: id,
           input: [{ type: 'text', text: 'same original input' }],
           personality: 'friendly',
-          approvalPolicy: 'untrusted',
+          approvalPolicy: 'on-request',
           sandboxPolicy: { type: 'readOnly' }
         })
         turns.start()

@@ -163,7 +163,7 @@ describe('CodexStructuredSessionAdapter.acquire', () => {
       method: 'thread/start',
       params: {
         cwd: '/work/repo',
-        approvalPolicy: 'untrusted',
+        approvalPolicy: 'on-request',
         sandbox: 'read-only',
         approvalsReviewer: 'user',
         // Explicit values survive inherit = core.
@@ -473,7 +473,7 @@ describe('CodexStructuredSessionAdapter.dispatch', () => {
       {
         threadId: THREAD_ID,
         clientUserMessageId: 'client-1',
-        approvalPolicy: 'untrusted',
+        approvalPolicy: 'on-request',
         approvalsReviewer: 'user',
         sandboxPolicy: { type: 'readOnly' },
         input: [

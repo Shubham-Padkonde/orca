@@ -306,7 +306,7 @@ it.each(['config', 'order', 'initial'] as const)(
       clientUserMessageId: id,
       input: [{ type: 'text', text: 'keep my words' }],
       personality: 'friendly',
-      approvalPolicy: 'untrusted',
+      approvalPolicy: 'on-request',
       sandboxPolicy: { type: 'readOnly' }
     })
     expect(answered).toBe(false)
