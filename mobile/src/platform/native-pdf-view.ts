@@ -1,6 +1,7 @@
-import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
+import { useCallback, useLayoutEffect, useMemo, useRef } from 'react'
 import { Platform } from 'react-native'
 import { Directory, File as FsFile, Paths } from 'expo-file-system'
+import { useFocusEffect } from 'expo-router'
 import { z } from 'zod'
 import { presentPdf } from '../../modules/orca-mobile-web-shell/src'
 import { PDF_MIME_TYPE } from '../files/mobile-file-media'
@@ -94,7 +95,7 @@ export function createNativePdfViewer(readClient: () => RpcClient | null) {
   }
 }
 
-// A replaced or closed page must not have a viewer pop up over whatever screen comes next.
+// A replaced, closed or covered shell must not have a viewer pop up over whatever screen comes next.
 export function useNativePdfViewer(
   hostId: string,
   sessionId: string | null
@@ -105,6 +106,6 @@ export function useNativePdfViewer(
     clientRef.current = client
   }, [client])
   const viewer = useMemo(() => createNativePdfViewer(() => clientRef.current), [sessionId])
-  useEffect(() => () => viewer.dispose(), [viewer])
+  useFocusEffect(useCallback(() => () => viewer.dispose(), [viewer]))
   return viewer.serve
 }
