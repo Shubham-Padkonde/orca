@@ -106,7 +106,7 @@ function argumentsInput(label: string): HTMLTextAreaElement {
   if (expand) {
     fireEvent.click(expand)
   }
-  const input = within(row).getByPlaceholderText('No default arguments')
+  const input = within(row).getByRole('textbox', { name: 'Arguments' })
   if (!(input instanceof HTMLTextAreaElement)) {
     throw new Error('Missing Arguments input')
   }

@@ -176,20 +176,34 @@ export function AgentPermissionMenu({
   label,
   permission,
   inheritLabel,
-  disabled
+  disabled,
+  layout = 'inline'
 }: {
   agentId: string
   label: string
   permission: AgentPermissionChoiceRow
   inheritLabel?: string
   disabled?: boolean
+  layout?: 'inline' | 'stacked'
 }): React.JSX.Element {
   const followAll =
     inheritLabel ?? translate('settings.agents.permissionSameAsAll', 'Same as all agents')
   const current = agentPermissionChoiceLabel(permission.choice, label)
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-      <span className="text-xs font-medium">
+    <div
+      className={cn(
+        'flex min-w-0',
+        layout === 'stacked'
+          ? 'flex-col items-stretch gap-2'
+          : 'flex-wrap items-center gap-x-3 gap-y-1'
+      )}
+    >
+      <span
+        className={cn(
+          'text-xs font-medium',
+          layout === 'stacked' && 'leading-none text-muted-foreground'
+        )}
+      >
         {translate('settings.agents.rowPermissions', 'Permissions')}
       </span>
       <DropdownMenu>
@@ -201,7 +215,7 @@ export function AgentPermissionMenu({
             aria-label={translate('settings.agents.rowPermissionsLabel', '{{agent}} permissions', {
               agent: label
             })}
-            className="max-w-full"
+            className={cn('min-w-0 max-w-full', layout === 'stacked' && 'w-full justify-between')}
           >
             <span className="truncate">
               {permission.source === 'all' ? `${followAll} · ${current}` : current}

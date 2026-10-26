@@ -146,11 +146,11 @@ export function AgentDefaultArgsInput({
   }
 
   return (
-    <div className="flex flex-col gap-1">
-      <span className="text-xs text-muted-foreground">
+    <div className="flex min-w-0 flex-col gap-1">
+      <span className="text-xs font-medium leading-none text-muted-foreground">
         {translate('auto.components.settings.AgentsPane.cfb3f35775', 'Arguments')}
       </span>
-      <div className="flex items-center gap-2">
+      <div className="flex min-w-0 items-center gap-2">
         <div
           className="scrollbar-sleek relative max-h-[calc(var(--spacing)*41+2px)] min-h-7 min-w-0 flex-1 overflow-x-hidden overflow-y-auto rounded-md border border-input px-3 py-0.5 shadow-xs transition-[color,box-shadow] focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50 dark:bg-input/30"
           onBlur={(event) => {
@@ -222,8 +222,13 @@ export function AgentDefaultArgsInput({
               }
             }}
             placeholder={
-              defaultArgs ||
-              translate('auto.components.settings.AgentsPane.6f99bf5dd0', 'No default arguments')
+              permissionChip
+                ? undefined
+                : defaultArgs ||
+                  translate(
+                    'auto.components.settings.AgentsPane.6f99bf5dd0',
+                    'No default arguments'
+                  )
             }
             spellCheck={false}
             className="block min-h-5 [field-sizing:content]"

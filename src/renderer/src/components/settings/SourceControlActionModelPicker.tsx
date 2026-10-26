@@ -59,7 +59,7 @@ export function SourceControlActionModelPicker({
   const options = selected?.model ? sourceControlActionOptions(agent, selected.model) : []
   const defaultLabel = translate('settings.sourceControl.actionModel.effortDefault', 'Default')
   return (
-    <div className="grid min-w-0 gap-2">
+    <div className="grid min-w-0 grid-cols-1 gap-2">
       {catalog ? (
         <SourceControlActionOptionField
           label={translate('settings.sourceControl.actionModel.model', 'Model')}

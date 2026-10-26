@@ -16,7 +16,7 @@ export function SourceControlActionOptionField({
 }): React.JSX.Element {
   return (
     <div className="min-h-[56.5px] min-w-0 space-y-2">
-      <Label>{label}</Label>
+      <Label variant="settings">{label}</Label>
       {children}
       {hint ? <p className="text-[11px] text-muted-foreground">{hint}</p> : null}
     </div>
@@ -40,7 +40,7 @@ export function SourceControlActionOptionTrigger({
   disabled?: boolean
 }): React.JSX.Element {
   const trigger = (
-    <SelectTrigger size="sm" className="h-8 w-full min-w-0" aria-label={label}>
+    <SelectTrigger size="sm" density="compact" className="h-8 w-full min-w-0" aria-label={label}>
       <SelectValue className="min-w-0 flex-1">
         <span className="min-w-0 flex-1 truncate text-left">{label}</span>
       </SelectValue>

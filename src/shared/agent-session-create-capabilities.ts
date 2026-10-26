@@ -23,6 +23,10 @@ export const AGENT_SESSION_CREATE_OPTIONS_MODE_RUNTIME_CAPABILITY =
 // Send is strict: advertise skills before sending selected paths; name-based agents still use the $name text.
 export const AGENT_SESSION_SEND_SKILLS_RUNTIME_CAPABILITY = 'agent-session.send-skills.v1' as const
 
+// Ensure is strict: send a resumed Claude session's effort only to hosts advertising support.
+export const AGENT_SESSION_RESUME_EFFORT_RUNTIME_CAPABILITY =
+  'agent-session.resume-effort.v1' as const
+
 export const AGENT_SESSION_SEND_USAGE_LIMIT_CONTINUATION_RUNTIME_CAPABILITY =
   'agent-session.send-usage-limit-continuation.v1' as const
 
@@ -34,5 +38,6 @@ export const AGENT_SESSION_CREATE_RUNTIME_CAPABILITIES = [
   AGENT_SESSION_CREATE_TAB_PLACEMENT_RUNTIME_CAPABILITY,
   AGENT_SESSION_SEND_OPTIONS_RUNTIME_CAPABILITY,
   AGENT_SESSION_ACCOUNT_ENV_RUNTIME_CAPABILITY,
-  AGENT_SESSION_SEND_SKILLS_RUNTIME_CAPABILITY
+  AGENT_SESSION_SEND_SKILLS_RUNTIME_CAPABILITY,
+  AGENT_SESSION_RESUME_EFFORT_RUNTIME_CAPABILITY
 ] as const

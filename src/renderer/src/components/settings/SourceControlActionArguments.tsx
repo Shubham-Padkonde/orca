@@ -50,6 +50,7 @@ export function SourceControlActionArguments({
         <AgentPermissionMenu
           agentId={agent}
           label={label}
+          layout="stacked"
           disabled={disabled}
           inheritLabel={translate(
             'settings.sourceControl.actionPermissions.sameAsAgent',
