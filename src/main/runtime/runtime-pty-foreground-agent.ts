@@ -18,12 +18,13 @@ type Dependencies = {
 }
 
 // Windows native Claude is claude.exe (recognized by name), and confirm there forces a full scan.
-const NATIVE_CLAUDE_VERSION_NAME = /^\d+\.\d+\.\d+/
+const NATIVE_CLAUDE_VERSION_NAME = /^\d+\.\d+\.\d+$/
 
 export class RuntimePtyForegroundAgent {
   private readonly refreshes = new Map<string, PtyForegroundAgentRefresh>()
   private readonly reads = new Map<string, PtyForegroundProcessReadEntry>()
   private readonly delayedTitles = new Map<string, number>()
+  private readonly identifies = new Map<string, Promise<TerminalAgent | null | undefined>>()
   // A scan's verdict for an unfamiliar name holds while that name stays in the foreground.
   private readonly confirmedByPtyId = new Map<
     string,
@@ -101,16 +102,23 @@ export class RuntimePtyForegroundAgent {
     return entry.promise
   }
 
-  /** Null when launch, foreground, or command evidence already owns the pane; false when the read or scan timed out. */
-  identifyUnowned(ptyId: string): Promise<boolean> | null {
+  /**
+   * Null when launch, foreground, or command evidence already owns the pane; resolves undefined when the read timed out.
+   * Not stored on the pty: a dialog declined before any title would leave no title transition to clear it.
+   */
+  identifyUnowned(ptyId: string): Promise<TerminalAgent | null | undefined> | null {
     const pty = this.deps.getPty(ptyId)
     if (!pty || (pty.launchAgent ?? pty.foregroundAgent ?? pty.launchCommandAgent)) {
       return null
     }
-    return withTimeoutResult(
-      this.load(ptyId, 0, true),
-      TERMINAL_INTERACTIVE_WAIT_PROBE_TIMEOUT_MS
-    ).then((result) => result.ok)
+    let pending = this.identifies.get(ptyId)
+    if (!pending) {
+      pending = this.identify(ptyId, 0, true).finally(() => this.identifies.delete(ptyId))
+      this.identifies.set(ptyId, pending)
+    }
+    return withTimeoutResult(pending, TERMINAL_INTERACTIVE_WAIT_PROBE_TIMEOUT_MS).then((result) =>
+      result.ok ? (result.value ?? null) : undefined
+    )
   }
 
   getPending(ptyId: string, afterTitle: number): Promise<boolean> | undefined {
@@ -141,19 +149,31 @@ export class RuntimePtyForegroundAgent {
     this.confirmedByPtyId.delete(ptyId)
   }
 
-  private async load(
+  private async load(ptyId: string, afterTitle: number): Promise<boolean> {
+    const agent = await this.identify(ptyId, afterTitle, false)
+    const pty = this.deps.getPty(ptyId)
+    if (agent === undefined || !pty || pty.foregroundAgent === agent) {
+      return false
+    }
+    pty.foregroundAgent = agent
+    this.deps.touchSnapshot(ptyId)
+    return true
+  }
+
+  /** Undefined when the foreground could not be read. */
+  private async identify(
     ptyId: string,
     afterTitle: number,
-    confirmVersionNamed = false
-  ): Promise<boolean> {
+    confirmVersionNamed: boolean
+  ): Promise<TerminalAgent | null | undefined> {
     const controller = this.deps.getController()
     const pty = this.deps.getPty(ptyId)
     if (!controller || !pty?.connected || pty.launchAgent) {
-      return false
+      return undefined
     }
     const result = await this.read(ptyId, afterTitle)
     if (!result || result.controller !== this.deps.getController() || !result.available) {
-      return false
+      return undefined
     }
     const foregroundName = result.process
     let agent = recognizeAgentProcess(foregroundName)?.agent ?? null
@@ -165,7 +185,7 @@ export class RuntimePtyForegroundAgent {
       } else if (confirmVersionNamed && process.platform !== 'win32') {
         const confirmedName = await this.confirm(result.controller, ptyId)
         if (result.controller !== this.deps.getController()) {
-          return false
+          return undefined
         }
         agent = recognizeAgentProcess(confirmedName)?.agent ?? null
         // A failed or unavailable scan proves nothing, so only an answered scan is kept.
@@ -176,12 +196,7 @@ export class RuntimePtyForegroundAgent {
     } else {
       this.confirmedByPtyId.delete(ptyId)
     }
-    if (pty.foregroundAgent === agent) {
-      return false
-    }
-    pty.foregroundAgent = agent
-    this.deps.touchSnapshot(ptyId)
-    return true
+    return agent
   }
 
   private async confirm(controller: RuntimePtyController, ptyId: string): Promise<string | null> {

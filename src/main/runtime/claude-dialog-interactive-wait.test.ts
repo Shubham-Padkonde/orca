@@ -89,6 +89,15 @@ describe('hand-typed native Claude, whose process name is its version', () => {
     expect(counts.scans).toBe(1)
   })
 
+  it('stops treating the pane as Claude once the shell is back in the foreground', async () => {
+    const { runtime, handle } = await typedPane()
+    await expect(runtime.getTerminalInteractiveWait(handle)).resolves.toMatchObject({
+      reason: 'agent-trust-workspace'
+    })
+    vi.spyOn(runtime['ptyController']!, 'getForegroundProcess').mockResolvedValue('bash')
+    expect(runtime['getPaneAgentForTuiIdle'](TRANSCRIPT_PANE_PTY_ID)).toBeNull()
+  })
+
   it('never scans from a background refresh', async () => {
     const { runtime, counts } = await typedPane()
     await runtime.refreshPtyForegroundAgentFromController(TRANSCRIPT_PANE_PTY_ID)
