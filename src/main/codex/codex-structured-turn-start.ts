@@ -69,6 +69,7 @@ export type CodexTurnHost = {
   permissions?: CodexSession['permissions']
   options: Map<string, string>
   appliedTurnOptions?: Readonly<Record<string, string>>
+  appliedSettings?: CodexSession['appliedSettings']
   reportedOptions?: CodexSession['reportedOptions']
   catalogAccess?: CodexSession['catalogAccess']
   dispatchEchoes: CodexDispatchEchoes
@@ -154,6 +155,7 @@ export async function startCodexTurn(
   const previousApplied = host.appliedTurnOptions
   const previousOptions = input.turnOptions ? new Map(host.options) : null
   let enqueued = false
+  let discardSettingsAttempt: (() => void) | undefined
   const enqueue = (
     permission: Parameters<Parameters<typeof admitCodexTurnPermission>[2]>[0],
     body = input.body
@@ -166,6 +168,8 @@ export async function startCodexTurn(
       }
     }
     host.appliedTurnOptions = input.turnOptions ?? Object.fromEntries(host.options)
+    const requested = codexTurnRequestOptions(host)
+    discardSettingsAttempt = host.appliedSettings?.attempt(requested)
     enqueued = true
     return {
       kind: 'sent' as const,
@@ -177,7 +181,7 @@ export async function startCodexTurn(
             clientUserMessageId: input.clientMessageId,
             input: turnInputFor(host, body),
             ...permission,
-            ...codexTurnRequestOptions(host)
+            ...requested
           },
           { timeoutMs: input.timeoutMs, onReply: input.onReply }
         )
@@ -201,6 +205,9 @@ export async function startCodexTurn(
     if (!enqueued) {
       host.dispatchEchoes.disarm(input.clientMessageId)
       checkDispatchAuthority(host, input.clientMessageId, input.signal, input.isCurrent)
+    }
+    if (isCodexAppServerRequestError(error) || isCodexAppServerUnsupportedError(error)) {
+      discardSettingsAttempt?.()
     }
     if (
       previousOptions &&

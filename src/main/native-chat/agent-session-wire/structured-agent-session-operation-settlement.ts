@@ -1,5 +1,3 @@
-import { agentSessionFailureFact } from '../../../shared/agent-session-failure'
-import { agentSessionFailureWords } from '../../../shared/agent-session-failure-words'
 import type { AgentSessionHandoverContext } from './structured-agent-session-host-types'
 import type { AgentSessionDispatchOutcome } from './structured-agent-session-adapter'
 import { DISPATCH_DOUBT_PERSISTENCE_FAILED } from '../agent-session-journal/journal-dispatch-doubt-reasons'
@@ -150,7 +148,12 @@ export async function resolveHandover(
               ...(outcome.answeredInTurn ? { answeredInTurn: outcome.answeredInTurn } : {}),
               fence: ctx.fence
             }
-          : { clientMessageId, state: 'unknown', reason: outcome.reason, fence: ctx.fence }
+          : {
+              clientMessageId,
+              state: 'unknown',
+              reason: outcome.reason,
+              fence: ctx.fence
+            }
     )
   } catch (error) {
     // Persist uncertainty if settlement fails; next-open recovery handles any remaining pending row.
@@ -163,18 +166,5 @@ export async function resolveHandover(
       })
     } catch {}
     throw error
-  }
-}
-
-/** Non-delivery proof applies only to queued handoffs; direct sends still owe stopped-history handling. */
-export function cancelledDispatch(
-  neverReachedAgent: boolean
-): Extract<AgentSessionDispatchOutcome, { state: 'rejected' }> {
-  return {
-    state: 'rejected',
-    ...agentSessionFailureWords(
-      agentSessionFailureFact('cancelled', neverReachedAgent ? { neverReachedAgent } : {}),
-      { surface: 'rejection' }
-    )
   }
 }

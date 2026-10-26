@@ -83,6 +83,7 @@ beforeEach(async () => {
   retained = false
   codex = fakeCodex({
     'config/read': () => config,
+    'thread/goal/get': () => ({ goal: null }),
     'configRequirements/read': () => ({ requirements: null })
   })
   codex.routes['thread/start'] = codex.routes['thread/resume'] = (params) => ({
@@ -573,6 +574,9 @@ it.each(['stop', 'local-abort'] as const)(
     const hostChild = session.child!
     const provider = adapter['sessions'].get(SESSION)!
     const translator = provider.translator
+    Object.defineProperty(provider.connection, 'closeResult', {
+      get: () => (provider.connection.closed ? { root: 'exited', tree: 'exited' } : undefined)
+    })
     const echoed = vi.spyOn(provider.dispatchEchoes, 'settle')
     const persisted = vi.spyOn(journal, 'resolveDispatch')
     const accepted = vi.spyOn(journal, 'acceptLate')

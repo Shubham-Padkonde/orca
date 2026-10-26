@@ -5,6 +5,7 @@ import type {
 } from './structured-agent-session-conversation-open'
 import type { createStructuredAgentSessionConversationLifetime } from './structured-agent-session-conversation-lifetime'
 import type { UnsentSendHold } from '../agent-session-journal/journal-unsent-send-hold'
+import type { AgentSessionStopOutcome } from './structured-agent-session-adapter-stop'
 import type { StructuredAgentSessionRequestFailure } from './structured-agent-session-request-failures'
 import type { StructuredAgentSessionCommandHandoverContext } from './structured-agent-session-command-turn'
 import type { StructuredAgentSessionAcquireAborts } from './structured-agent-session-acquire-aborts'
@@ -72,6 +73,7 @@ export type StructuredAgentSessionChildClose = {
   readonly quit?: true
   readonly reason: string | null
   readonly failure?: SubmissionRejectionFact
+  stopOutcome?: AgentSessionStopOutcome
   /** Fold Stop before settling work; repeated unnamed personal closes reopen settlement. */
   recorded: Promise<JournalStopSettle | null>
   /** Order child exit at the Stop request; repeated requests advance this boundary. */
@@ -183,6 +185,7 @@ export type SetUserConversationName = StructuredAgentSessionConversationNaming['
 export type StructuredChatNamingFailure = AgentSessionNamingError & { forName: string }
 
 export type StructuredAgentSessionConversationNaming = {
+  publishName: (workspaceId: string, sessionId: string) => void
   activeSessionIds: () => string[]
   failure: (sessionId: string) => StructuredChatNamingFailure | undefined
   /** Full failed naming output; local-only, never published. */
@@ -199,7 +202,6 @@ export type StructuredAgentSessionConversationNaming = {
 }
 
 export type AgentSessionHandoverContext = StructuredAgentSessionCommandHandoverContext & {
-  logger?: StructuredAgentSessionLogger
   admitFreshInput?: StructuredAgentSessionAdmitHostInput
   continueInput?: StructuredAgentSessionContinueInput
   acquireAborts?: Pick<StructuredAgentSessionAcquireAborts, 'begin'>

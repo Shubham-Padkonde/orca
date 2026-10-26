@@ -7,7 +7,8 @@ import type { AgentSessionJournal } from '../agent-session-journal/journal-store
 import {
   openStructuredAgentSessionConversation,
   resettleOpenStructuredAgentSessionConversation,
-  type OpenedStructuredAgentSessionConversation
+  type OpenedStructuredAgentSessionConversation,
+  type StructuredAgentSessionConversationOpenOptions
 } from './structured-agent-session-conversation-open'
 import type { StructuredAgentSessionClientDelivery } from './structured-agent-session-client-delivery'
 import type { StructuredAgentSessionDeliveryOrder } from './structured-agent-session-delivery-order'
@@ -19,7 +20,6 @@ import { structuredAgentSessionCommandRunning } from './structured-agent-session
 import type { StructuredAgentSessionStartClaim } from './structured-agent-session-agent-start'
 import type { StructuredAgentSessionStartReadiness } from './structured-agent-session-startup-attempt'
 import type {
-  StructuredAgentSessionConversationDelivery,
   StructuredAgentSessionHostDeps,
   StructuredAgentSessionHostSession,
   StructuredAgentSessionProviderChildIdentity
@@ -36,13 +36,27 @@ import {
   structuredAgentSessionInputCompilerPermission,
   structuredAgentSessionImmediatePermission
 } from './structured-agent-session-launch-permission'
-import { continuingStructuredAgentSessionInput } from './structured-agent-session-handing-over'
 import { acceptedNoLaterThan } from './structured-agent-session-start-failure-row'
 import type { StructuredAgentSessionAcquireAborts } from './structured-agent-session-acquire-aborts'
 import { settleStructuredAgentSessionLeftovers } from './structured-agent-session-leftover-settlement'
 import { createStructuredAgentSessionRanRecorder } from './structured-agent-session-ran-options'
 
-export type { StructuredAgentSessionConversationDelivery } from './structured-agent-session-host-types'
+export type StructuredAgentSessionConversationDelivery = {
+  loop: StructuredAgentSessionDeliveryLoop
+  open: (
+    sessionId: string,
+    options?: StructuredAgentSessionConversationOpenOptions
+  ) => Promise<StructuredAgentSessionHostSession | null>
+  /** Queue commit wakes under serialization so they cannot race a loop’s stopping decision. */
+  afterCommit: (sessionId: string, journal: AgentSessionJournal) => void
+  /** Settle edges affect status/steer holds without rows or renewed idle activity. */
+  afterSettleEdge: (sessionId: string, journal: AgentSessionJournal) => void
+  dispose: () => void
+  adoptOpened: (
+    sessionId: string,
+    opened: OpenedStructuredAgentSessionConversation
+  ) => Promise<void>
+}
 
 export function createStructuredAgentSessionConversationDelivery(input: {
   deps: StructuredAgentSessionHostDeps
@@ -81,14 +95,7 @@ export function createStructuredAgentSessionConversationDelivery(input: {
     },
     providerHoldsDispatch: () =>
       deps.adapter.holdsDispatch?.(sessionId) === true ||
-      (continuingId
-        ? [...(sessions.get(sessionId)?.child?.heldSends?.() ?? [])].some(
-            (id) => id !== continuingId
-          )
-        : hostStructuredAgentSessionCurrentWork(
-            { store: deps.store, sessions },
-            sessionId
-          )?.holdsHandedOverSend() === true)
+      [...(sessions.get(sessionId)?.child?.heldSends?.() ?? [])].some((id) => id !== continuingId)
   })
   const loop = new StructuredAgentSessionDeliveryLoop({
     sessions,
@@ -97,26 +104,12 @@ export function createStructuredAgentSessionConversationDelivery(input: {
     serialize: input.serialize,
     trackStart: input.trackStart,
     startProviderChild: input.startProviderChild,
-    retireOutgrownChild: async (sessionId, next) => {
-      const journal = sessions.get(sessionId)?.journal
-      const continuingId =
-        journal && continuingStructuredAgentSessionInput(journal, next.clientMessageId)
-          ? next.clientMessageId
-          : undefined
+    retireOutgrownChild: async (sessionId, continuingId) => {
       // Defer retirement while personal Stop holds handover; its next step decides.
       const session = input.clientDelivery.readStopping(sessionId)
         ? undefined
         : sessions.get(sessionId)
-      return retireOutgrownStructuredAgentSessionChild(sessionId, session, {
-        next,
-        turnScopedSteering: deps.store.getRecord(sessionId)?.provider === 'claude',
-        requiresModelTransitionRestart: (submission) =>
-          session?.child?.phase === 'ready' &&
-          deps.adapter.requiresModelTransitionRestart?.({
-            sessionId,
-            fence: session.child.fence,
-            executionOptions: submission.options
-          }) === true,
+      await retireOutgrownStructuredAgentSessionChild(sessionId, session, {
         work: retainedWork(sessionId, continuingId),
         launchPermission: async () => {
           const record = deps.store.getRecord(sessionId)

@@ -236,7 +236,7 @@ export function registerCodexInputFinalization(current: typeof codexInputFinaliz
       const closeDecision = vi.fn<(id: string) => Promise<boolean>>()
       const delayed = vi.spyOn(deps, 'serialize').mockImplementation(async (sessionId, task) => {
         const value = await ordered(sessionId, task)
-        if (result === 'null' && value && typeof value === 'object' && 'dispatch' in value) {
+        if (result === 'null' && value && typeof value === 'object' && 'run' in value) {
           entered.resolve()
           await held.promise
         }
@@ -566,7 +566,7 @@ export function registerCodexInputFinalization(current: typeof codexInputFinaliz
       if (
         boundary === 'retire' &&
         args[1] &&
-        continuingStructuredAgentSessionInput(journal, args[1].clientMessageId)
+        continuingStructuredAgentSessionInput(journal, args[1])
       ) {
         entered.resolve()
         await held.promise
@@ -613,8 +613,8 @@ export function registerCodexInputFinalization(current: typeof codexInputFinaliz
     const id = await permissionSend('same original input', { personality: 'friendly' })
     const waiting = host.waitForSendSettlement(SESSION, id)
     const originalBody = hostTestMessage('same original input')
-    // Ready-child exit proof settles before lease release; terminal rows keep that fence.
-    const settlesAtChildFence = ['retire', 'readiness', 'rebind'].includes(boundary)
+    // Ready replacement-child exit proof settles before lease release; terminal rows keep that fence.
+    const settlesAtChildFence = ['readiness', 'rebind'].includes(boundary)
     let boundFence = journal.submission(id)!.fence
     let stopping: Promise<unknown> = Promise.resolve()
     try {
