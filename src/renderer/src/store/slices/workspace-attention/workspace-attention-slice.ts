@@ -108,9 +108,8 @@ export const createWorkspaceAttentionSlice: StateCreator<
       }
     },
     readOnScreenAttention: ({ workspaceIds, targets }, { screenArrived }) => {
-      const removed = removeAndDismiss(targets.map((target) => target.tabId)) !== null
       // Read marker-free flags on screen arrival (manual unread/restart/peer), not on every scan.
-      if (removed || screenArrived) {
+      if (removeAndDismiss(targets.map((target) => target.tabId)) !== null || screenArrived) {
         for (const workspaceId of workspaceIds) {
           settleWorkspaceUnreadFlag(set, get, workspaceId, onScreenHostId(get(), workspaceId))
         }

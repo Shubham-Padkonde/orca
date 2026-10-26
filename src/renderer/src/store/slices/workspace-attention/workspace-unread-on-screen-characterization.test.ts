@@ -296,12 +296,12 @@ describe('the flag follows its markers', () => {
     expect(dismissedPaneKeys()).toEqual([[first.paneKey, second.paneKey]])
   })
 
-  it('Mark as read sends a cleared chat the explicit read that retires its positioned phone alert', () => {
+  it('Mark as read emits an explicit read for each cleared chat', () => {
     const { store } = createAttentionStore()
-    store
+    const chat = store
       .getState()
       .createUnifiedTab(WS_A, 'agent-session', { id: 'chat-a1', entityId: 'session-1' })
-    const paneKey = structuredAgentSessionPaneKey('chat-a1', 'session-1')
+    const paneKey = structuredAgentSessionPaneKey(chat.id, chat.entityId)
     store.getState().markAgentAttentionUnread({
       workspaceId: WS_A,
       subjectKey: paneKey,
