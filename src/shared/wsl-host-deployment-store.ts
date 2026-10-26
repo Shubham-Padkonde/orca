@@ -17,9 +17,19 @@ const WSL_HOST_DEPLOYMENTS_FILE = 'orca-wsl-host-deployments.json'
 const MAX_WSL_HOST_DEPLOYMENTS_FILE_BYTES = 256 * 1024
 
 /** A managed orcad in a WSL distro. The environment's name is its label; runtime state lives elsewhere. */
+/** A Remove that could not prove the host's server stopped (E11); the host stays until one does. */
+export const WslHostPendingStopSchema = z.object({
+  since: z.number().finite(),
+  reason: z.string().max(4_096),
+  verdict: z.enum(['live', 'unverifiable'])
+})
+
+export type WslHostPendingStop = z.infer<typeof WslHostPendingStopSchema>
+
 export const WslHostDeploymentRecordSchema = OrcadWslDeploymentLinkSchema.extend({
   environmentId: z.string().min(1),
-  createdAt: z.number().finite()
+  createdAt: z.number().finite(),
+  pendingStop: WslHostPendingStopSchema.optional()
 })
 
 export type WslHostDeploymentRecord = z.infer<typeof WslHostDeploymentRecordSchema>
@@ -183,7 +193,12 @@ export function overlayWslHostDeployments(
       if (!record) {
         return environment
       }
-      const { environmentId: _environmentId, createdAt: _createdAt, ...link } = record
+      const {
+        environmentId: _environmentId,
+        createdAt: _createdAt,
+        pendingStop: _pendingStop,
+        ...link
+      } = record
       const overlaid = hasNonWslOwner(environment)
         ? null
         : KnownRuntimeEnvironmentSchema.safeParse({ ...environment, orcadDeployment: link })

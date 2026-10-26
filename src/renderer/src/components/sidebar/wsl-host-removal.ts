@@ -21,6 +21,18 @@ async function removeWslHostImpl(environmentId: string): Promise<void> {
     state.setActiveWorktree(null)
   }
   state.setRuntimeEnvironments(await window.api.runtimeEnvironments.list())
+  if (serverStop?.stopped === false && serverStop.kept) {
+    // E11: a stop Orca couldn't prove keeps the host listed, so Remove can retry it.
+    toast.warning(
+      translate(
+        'auto.components.sidebar.wslHostRemoval.pending',
+        'Orca didn’t remove the host yet: {{value0}} Remove it again to retry, or connect it to keep it.',
+        { value0: serverStop.reason }
+      ),
+      { duration: Infinity }
+    )
+    return
+  }
   // Why `=== false`: an older main answered nothing here.
   if (serverStop?.stopped === false) {
     // Why it stays up: it names what still runs in the distro, which the user has to act on.

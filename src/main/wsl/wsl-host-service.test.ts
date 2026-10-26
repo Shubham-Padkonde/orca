@@ -12,7 +12,7 @@ import { getPreferredPairingOffer } from '../../shared/runtime-environments'
 import type { WslHostServerStop, WslHostStatus } from '../../shared/wsl-host-types'
 import { OrcadHostUnsupportedError } from '../orcad/orcad-host-unavailable'
 import type { WslHostDistroCandidate } from './wsl-host-distro-list'
-import { WslHostService, type WslHostConnector } from './wsl-host-service'
+import { WslHostService, type WslDistroPresence, type WslHostConnector } from './wsl-host-service'
 import { WslOrcadLaunchDeferredError } from './wsl-orcad-connection-errors'
 import type { WslOrcadConnection } from './wsl-orcad-connection'
 
@@ -57,6 +57,9 @@ function makeConnector(distros: WslHostDistroCandidate[]) {
       async (_distro: string, _environmentId: string): Promise<WslHostServerStop> => ({
         stopped: true
       })
+    ),
+    distroPresence: vi.fn(
+      async (_distro: string, _distroId?: string): Promise<WslDistroPresence> => 'running'
     ),
     releaseHolder: vi.fn(async (_distro: string) => {}),
     adoptHolders: vi.fn(async (_isWanted: (distro: string) => boolean) => {}),
@@ -350,20 +353,133 @@ describe('WslHostService', () => {
     expect(removed).toHaveBeenCalledWith('wsl:ubuntu')
   })
 
-  it('reports what removing left running, and removes the host anyway', async () => {
+  it('keeps a host whose server it could not stop, pending, and nothing reconnects it', async () => {
     const connector = makeConnector([UBUNTU])
     connector.stopServer.mockResolvedValueOnce({
       stopped: false,
-      reason: '1 terminal kept running'
+      reason: '1 terminal kept running',
+      verdict: 'live'
     })
     const service = makeService(connector)
     await service.add({ distro: 'Ubuntu' })
+    service.setVisibleWork(['wsl:ubuntu'])
+    connector.connect.mockClear()
 
     await expect(service.remove('wsl:ubuntu')).resolves.toEqual({
       stopped: false,
-      reason: '1 terminal kept running'
+      reason: '1 terminal kept running',
+      verdict: 'live',
+      kept: true
     })
+    expect(listEnvironments(userDataPath)).toHaveLength(1)
+    expect(findWslHostDeployment(userDataPath, 'wsl:ubuntu')?.pendingStop).toMatchObject({
+      reason: '1 terminal kept running',
+      verdict: 'live'
+    })
+    expect(removed).not.toHaveBeenCalled()
+    expect(connector.releaseHolder).toHaveBeenCalledWith('Ubuntu')
+    expect(published.at(-1)).toMatchObject({
+      state: 'closed',
+      detail: '1 terminal kept running',
+      removalPending: true
+    })
+    // Open work, liveness and passive calls leave it alone.
+    expect(service.hasUserVisibleWork('Ubuntu')).toBe(false)
+    service.setVisibleWork([])
+    service.setVisibleWork(['wsl:ubuntu'])
+    connector.isReachable.mockResolvedValue(false)
+    await expect(service.ensureForRuntimeCall('wsl:ubuntu')).rejects.toThrow(
+      'didn’t finish removing'
+    )
+    expect(connector.connect).not.toHaveBeenCalled()
+
+    // Remove again: a proven stop finishes it.
+    await expect(service.remove('wsl:ubuntu')).resolves.toEqual({ stopped: true })
     expect(listEnvironments(userDataPath)).toEqual([])
+    expect(removed).toHaveBeenCalledWith('wsl:ubuntu')
+  })
+
+  it('keeps a pending stop pending when the stop is unverifiable', async () => {
+    const connector = makeConnector([UBUNTU])
+    const unverifiable = {
+      stopped: false as const,
+      reason: 'The terminal daemon did not answer a session count.',
+      verdict: 'unverifiable' as const
+    }
+    connector.stopServer.mockResolvedValue(unverifiable)
+    const service = makeService(connector)
+    await service.add({ distro: 'Ubuntu' })
+    await service.remove('wsl:ubuntu')
+    await expect(service.remove('wsl:ubuntu')).resolves.toEqual({ ...unverifiable, kept: true })
+    expect(connector.stopServer).toHaveBeenCalledTimes(2)
+    expect(listEnvironments(userDataPath)).toHaveLength(1)
+  })
+
+  it('never boots a stopped distro to retry a pending stop', async () => {
+    const connector = makeConnector([UBUNTU])
+    connector.stopServer.mockResolvedValueOnce({ stopped: false, reason: 'busy', verdict: 'live' })
+    const service = makeService(connector)
+    await service.add({ distro: 'Ubuntu' })
+    await service.remove('wsl:ubuntu')
+    connector.distroPresence.mockResolvedValue('stopped')
+    connector.connect.mockClear()
+
+    await expect(service.remove('wsl:ubuntu')).resolves.toEqual({
+      stopped: false,
+      verdict: 'unverifiable',
+      reason: 'Start Ubuntu to finish removing it.',
+      kept: true
+    })
+    expect(connector.stopServer).toHaveBeenCalledTimes(1)
+    expect(connector.connect).not.toHaveBeenCalled()
+    expect(findWslHostDeployment(userDataPath, 'wsl:ubuntu')?.pendingStop?.reason).toBe(
+      'Start Ubuntu to finish removing it.'
+    )
+  })
+
+  it('finishes removing a host whose distro is gone, which runs nothing', async () => {
+    const connector = makeConnector([UBUNTU])
+    connector.stopServer.mockResolvedValueOnce({ stopped: false, reason: 'busy', verdict: 'live' })
+    const service = makeService(connector)
+    await service.add({ distro: 'Ubuntu' })
+    await service.remove('wsl:ubuntu')
+    connector.distroPresence.mockResolvedValue('unregistered')
+
+    await expect(service.remove('wsl:ubuntu')).resolves.toEqual({ stopped: true })
+    expect(connector.distroPresence).toHaveBeenLastCalledWith('Ubuntu', UBUNTU_ID)
+    expect(listEnvironments(userDataPath)).toEqual([])
+  })
+
+  it('re-adding or connecting a pending host keeps it and withdraws the removal', async () => {
+    const connector = makeConnector([UBUNTU])
+    connector.stopServer.mockResolvedValue({ stopped: false, reason: 'busy', verdict: 'live' })
+    const service = makeService(connector)
+    await service.add({ distro: 'Ubuntu' })
+    await service.remove('wsl:ubuntu')
+    connector.connect.mockClear()
+
+    await expect(service.add({ distro: 'ubuntu' })).resolves.toEqual({
+      ok: true,
+      environmentId: 'wsl:ubuntu'
+    })
+    expect(connector.connect).toHaveBeenCalledWith('Ubuntu', {})
+    expect(findWslHostDeployment(userDataPath, 'wsl:ubuntu')?.pendingStop).toBeUndefined()
+
+    await service.remove('wsl:ubuntu')
+    await service.connect('wsl:ubuntu')
+    expect(findWslHostDeployment(userDataPath, 'wsl:ubuntu')?.pendingStop).toBeUndefined()
+  })
+
+  it('shows an unfinished removal from launch', async () => {
+    const connector = makeConnector([UBUNTU])
+    connector.stopServer.mockResolvedValueOnce({ stopped: false, reason: 'busy', verdict: 'live' })
+    await makeService(connector).add({ distro: 'Ubuntu' })
+    await makeService(connector).remove('wsl:ubuntu')
+    published = []
+    await makeService(connector).start()
+    expect(published).toEqual([
+      expect.objectContaining({ state: 'closed', detail: 'busy', removalPending: true })
+    ])
   })
 
   it('keeps a host whose removal failed usable and removable again', async () => {
