@@ -19,6 +19,7 @@ import { colors, typography } from '../theme/mobile-theme'
 import { ANSWERED_PROMPT_ITEMS } from './mobile-native-chat-answered-prompts.test-fixture'
 import { MobileNativeChatRowOverlaysContext } from './mobile-native-chat-row-overlays'
 import { styles } from './mobile-native-chat-message-styles'
+import { stubRpcClient } from '../transport/rpc-client-test-stub'
 
 vi.mock('react-native', async () => {
   const React = await import('react')
@@ -80,6 +81,9 @@ vi.mock('./MobileNativeChatMessageActionsSheet', () => ({
 
 import { MobileNativeChatMessage } from './MobileNativeChatMessage'
 import { findAllByHostType, findByHostType } from '../test-support/react-test-renderer-host-nodes'
+
+const PNG =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
 
 function userMessage(blocks: NativeChatMessage['blocks']): NativeChatMessage {
   return { id: 'u1', role: 'user', blocks, timestamp: null, source: 'transcript' }
@@ -623,6 +627,43 @@ describe('MobileNativeChatMessage', () => {
     expect(findAllByHostType(tree.root, 'Image')).toHaveLength(0)
     const texts = findAllByHostType(tree.root, 'Text').map((node) => String(node.children.join('')))
     expect(texts.some((text) => text.includes('/tmp/host.png'))).toBe(true)
+  })
+
+  // An older host refuses the read; the row keeps today's placeholder.
+  it.each([
+    [
+      { ok: true, result: { content: PNG, isBinary: true, isImage: true, mimeType: 'image/png' } },
+      [`data:image/png;base64,${PNG}`]
+    ],
+    [{ ok: false, error: { code: 'forbidden', message: 'not available to mobile clients' } }, []]
+  ] as const)('reads a stored image from the chat host: %j', async (reply, thumbnails) => {
+    const path = '/home/me/.orca/agent-session-attachments/6f1c2a4e/shot.png'
+    const sendRequest = vi.fn(async () => ({ id: '1', ...reply }))
+    await act(async () => {
+      renderer = create(
+        createElement(
+          MobileNativeChatRowOverlaysContext.Provider,
+          {
+            value: {
+              openImage: vi.fn(),
+              openActions: vi.fn(),
+              imageClient: stubRpcClient({ sendRequest })
+            }
+          },
+          createElement(MobileNativeChatMessage, {
+            message: userMessage([{ type: 'image-ref', path, alt: 'shot' }])
+          })
+        )
+      )
+    })
+    expect(sendRequest).toHaveBeenCalledWith(
+      'agentSessionAttachment.read',
+      { path },
+      expect.anything()
+    )
+    expect(
+      findAllByHostType(renderer!.root, 'Image').map((image) => image.props.source.uri)
+    ).toEqual(thumbnails)
   })
 
   it('draws your message as selectable Markdown in the bubble’s dark-on-light colours', () => {
