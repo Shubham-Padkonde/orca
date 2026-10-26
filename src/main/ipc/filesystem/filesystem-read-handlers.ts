@@ -136,7 +136,7 @@ export function registerFilesystemReadHandlers(context: FilesystemHandlerContext
         throw new SshHostNotServedError(args.connectionId)
       }
       const filePath = await resolveLocalFileRequestPath(args.filePath, args.access, store)
-      const stats = await stat(filePath)
+      const stats = await stat(windowsFsPath(filePath))
       return { size: stats.size, isDirectory: stats.isDirectory(), mtime: stats.mtimeMs }
     }
   )
@@ -155,7 +155,7 @@ export function registerFilesystemReadHandlers(context: FilesystemHandlerContext
         args.filePaths.map((filePath) =>
           capturePathExistence(async () => {
             try {
-              await stat(await resolveDesktopAuthorizedPath(filePath, store))
+              await stat(windowsFsPath(await resolveDesktopAuthorizedPath(filePath, store)))
               return true
             } catch (error) {
               if (isPathAbsentError(error)) {
@@ -180,7 +180,7 @@ export function registerFilesystemReadHandlers(context: FilesystemHandlerContext
           throw new SshHostNotServedError(args.connectionId)
         }
         const filePath = await resolveLocalFileRequestPath(args.filePath, args.access, store)
-        await stat(filePath)
+        await stat(windowsFsPath(filePath))
         return true
       } catch (error) {
         if (isPathAbsentError(error)) {

@@ -497,11 +497,9 @@
 1 test-no-real-time-wait:tests/e2e/artificial-opencode-revisit-pressure-scenario.ts
 1 test-no-real-time-wait:tests/e2e/artificial-opencode-scroll-scenario.ts
 1 test-no-real-time-wait:tests/e2e/browser-guest-crash-recovery.spec.ts
-1 test-no-real-time-wait:tests/e2e/browser-settings-preview.spec.ts
 1 test-no-real-time-wait:tests/e2e/browser-tab.spec.ts
 9 test-no-real-time-wait:tests/e2e/chinese-ime-chat-input-repro.spec.ts
 2 test-no-real-time-wait:tests/e2e/cli-floating-file-open-position.spec.ts
-1 test-no-real-time-wait:tests/e2e/client-hosted-browser-tooltip-preview.spec.ts
 1 test-no-real-time-wait:tests/e2e/codex-ctrl-c-status.spec.ts
 4 test-no-real-time-wait:tests/e2e/combined-diff-scroll-restore.spec.ts
 1 test-no-real-time-wait:tests/e2e/computer-windows.e2e.ts
@@ -1366,9 +1364,7 @@
 1 test-timeout-needs-reason:tests/e2e/agent-session-log-tail-stability.spec.ts
 1 test-timeout-needs-reason:tests/e2e/browser-agent-input-focus-isolation-native.spec.ts
 5 test-timeout-needs-reason:tests/e2e/browser-agent-input-focus-isolation.spec.ts
-1 test-timeout-needs-reason:tests/e2e/browser-settings-preview.spec.ts
 1 test-timeout-needs-reason:tests/e2e/cli-agent-unopened-workspace-resume.spec.ts
-1 test-timeout-needs-reason:tests/e2e/client-hosted-browser-tooltip-preview.spec.ts
 1 test-timeout-needs-reason:tests/e2e/combined-diff-invalidation-freeze-repro.spec.ts
 1 test-timeout-needs-reason:tests/e2e/completed-worker-retirement-resume.spec.ts
 2 test-timeout-needs-reason:tests/e2e/cross-version-wire/agent-session-clear-old-client.unit.test.ts
