@@ -35,7 +35,7 @@ export const BRIDGE_NATIVE_VERB_NAMES = [
   'native.audio.read',
   'native.audio.stop',
   'native.storage.read',
-  'native.pdf.open'
+  'native.pdf.view'
 ] as const
 
 export type BridgeNativeVerb = (typeof BRIDGE_NATIVE_VERB_NAMES)[number]
@@ -68,12 +68,22 @@ export const storageReadParamsSchema = z.strictObject({
 export const storageReadResultSchema = z.strictObject({ value: z.string().nullable() })
 
 // The shell downloads the file itself; page bytes would need staging verbs and exceed the frame cap.
-export const pdfOpenParamsSchema = z.strictObject({
-  worktreeId: z.string().min(1),
-  relativePath: z.string().refine((path) => mobileFileMediaMime(path) === PDF_MIME_TYPE),
-  executionHost: z.templateLiteral(['runtime:', z.string().min(1)]).optional()
-})
-export const pdfOpenResultSchema = z.strictObject({})
+// Bridge requests cannot be cancelled, so a preview the user left sends cancel; one verb keeps routes within the grant ceiling.
+export const pdfViewParamsSchema = z.discriminatedUnion('action', [
+  z.strictObject({
+    action: z.literal('open'),
+    worktreeId: z.string().min(1),
+    relativePath: z.string().refine((path) => mobileFileMediaMime(path) === PDF_MIME_TYPE),
+    executionHost: z.templateLiteral(['runtime:', z.string().min(1)]).optional()
+  }),
+  z.strictObject({ action: z.literal('cancel') })
+])
+export const pdfViewResultSchema = z.strictObject({})
+
+export type BridgePdfOpenParams = Omit<
+  Extract<z.infer<typeof pdfViewParamsSchema>, { action: 'open' }>,
+  'action'
+>
 
 export const BRIDGE_NATIVE_VERBS: Readonly<Record<BridgeNativeVerb, BridgeNativeVerbSpec>> = {
   'native.clipboard.write': {
@@ -116,9 +126,9 @@ export const BRIDGE_NATIVE_VERBS: Readonly<Record<BridgeNativeVerb, BridgeNative
     params: storageReadParamsSchema,
     result: storageReadResultSchema
   },
-  'native.pdf.open': {
-    params: pdfOpenParamsSchema,
-    result: pdfOpenResultSchema
+  'native.pdf.view': {
+    params: pdfViewParamsSchema,
+    result: pdfViewResultSchema
   }
 }
 

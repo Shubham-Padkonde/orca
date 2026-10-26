@@ -14,24 +14,26 @@ type State =
 
 // The shell downloads the PDF and shows it in Quick Look (iOS) or the system viewer (Android).
 export function MobilePdfPreview({ media }: { media: MobileFileMedia }) {
-  const openPdf = usePdfOpener()
+  const opener = usePdfOpener()
   const [state, setState] = useState<State>({ status: 'opening' })
   const [attempt, setAttempt] = useState(0)
   const { worktreeId, relativePath, mimeType } = media
   useEffect(() => {
-    if (!openPdf) {
+    if (!opener) {
       return
     }
-    let current = true
+    let pending = true
     setState({ status: 'opening' })
-    openPdf({ worktreeId, relativePath, mimeType }).then(
+    opener.open({ worktreeId, relativePath, mimeType }).then(
       () => {
-        if (current) {
+        if (pending) {
+          pending = false
           setState({ status: 'opened' })
         }
       },
       (error: unknown) => {
-        if (current) {
+        if (pending) {
+          pending = false
           setState({
             status: 'failed',
             message: error instanceof Error ? error.message : 'Unable to open this PDF',
@@ -41,11 +43,14 @@ export function MobilePdfPreview({ media }: { media: MobileFileMedia }) {
       }
     )
     return () => {
-      current = false
+      if (pending) {
+        pending = false
+        opener.cancel()
+      }
     }
-  }, [openPdf, worktreeId, relativePath, mimeType, attempt])
+  }, [opener, worktreeId, relativePath, mimeType, attempt])
   const reopen = () => setAttempt((count) => count + 1)
-  if (!openPdf) {
+  if (!opener) {
     return (
       <View style={styles.state}>
         <Text style={styles.stateText}>Update Orca Mobile to open PDFs</Text>

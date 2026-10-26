@@ -24,7 +24,7 @@ import { useMobileWebShellBridge } from './use-mobile-web-shell-bridge'
 import type { MobileWebShellRuntime } from './mobile-web-shell-runtime'
 import { useKeyboardOcclusion } from '../platform/keyboard-occlusion'
 import { useNativeDeviceVerbs } from '../platform/use-native-device-verbs'
-import { useNativePdfOpener } from '../platform/native-pdf-open'
+import { useNativePdfViewer } from '../platform/native-pdf-view'
 import { useShellPageBack } from './use-shell-page-back'
 import { useShellStackPop } from './use-shell-stack-pop'
 import { useMobileWebShellSession } from './use-mobile-web-shell-session'
@@ -172,12 +172,12 @@ export function MobileWebShellScreen({
     usePageHostSnapshot(hostId, route.pathname, ownsHostArea)
   // Create the media registry before the bridge; its staged files must belong to this page session.
   const serveDeviceVerb = useNativeDeviceVerbs(state.kind === 'ready' ? state.sessionId : null)
-  const openPdf = useNativePdfOpener(hostId, state.kind === 'ready' ? state.sessionId : null)
+  const servePdfView = useNativePdfViewer(hostId, state.kind === 'ready' ? state.sessionId : null)
   const serveNativeVerb = (verb: BridgeNativeVerb, params: unknown): Promise<unknown> =>
     verb === 'native.storage.read'
       ? readWorkspaceKey(storageReadParamsSchema.parse(params).key).then((value) => ({ value }))
-      : verb === 'native.pdf.open'
-        ? openPdf(params)
+      : verb === 'native.pdf.view'
+        ? servePdfView(params)
         : serveDeviceVerb(verb, params)
   // Both externalLink and cancelled navigation use this filtered opener. Report device-handler failure without throwing from a native frame callback; neither path has a reply.
   const openUrlForPage = (url: string) => {

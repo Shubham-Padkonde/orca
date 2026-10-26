@@ -19,10 +19,10 @@ import {
 import {
   clipboardReadResultSchema,
   clipboardWriteResultSchema,
-  pdfOpenResultSchema,
+  pdfViewResultSchema,
   type BridgeClipboardMime,
   type BridgeNativeVerb,
-  type pdfOpenParamsSchema
+  type BridgePdfOpenParams
 } from './bridge-native-verbs'
 
 // Use ordinary request frames/caps, served only on-device. Refuse ungranted verbs before posting and parse results because the installed shell can differ from this page build.
@@ -45,7 +45,8 @@ export type NativeVerbs = {
   // Stop carries final ring audio; stopped:false is normal after a repeated stop or an OS-ended capture.
   stopAudio: () => Promise<z.infer<typeof audioStopResultSchema>>
   canOpenPdf: boolean
-  openPdf: (params: z.input<typeof pdfOpenParamsSchema>) => Promise<void>
+  openPdf: (params: BridgePdfOpenParams) => Promise<void>
+  cancelPdf: () => Promise<void>
 }
 
 // Expose stable reason codes, including local ungranted and frame refusals. Unknown newer-shell codes floor to unreported so caller switches remain exhaustive.
@@ -155,9 +156,12 @@ export function useNativeVerbs(): NativeVerbs {
         call('native.audio.start', { sampleRate }, audioStartResultSchema),
       readAudio: (maxBytes) => call('native.audio.read', { maxBytes }, audioReadResultSchema),
       stopAudio: () => call('native.audio.stop', {}, audioStopResultSchema),
-      canOpenPdf: has('native.pdf.open'),
+      canOpenPdf: has('native.pdf.view'),
       openPdf: async (params) => {
-        await call('native.pdf.open', params, pdfOpenResultSchema)
+        await call('native.pdf.view', { action: 'open', ...params }, pdfViewResultSchema)
+      },
+      cancelPdf: async () => {
+        await call('native.pdf.view', { action: 'cancel' }, pdfViewResultSchema)
       }
     }
   }, [client])
