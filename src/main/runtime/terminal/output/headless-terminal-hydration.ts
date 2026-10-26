@@ -172,6 +172,34 @@ export abstract class OrcaRuntimeWithMaybeHydrateHeadlessFromRenderer extends Or
     })
   }
 
+  /** True when this PTY's queries go unanswered unless its single receiving remote view answers them. */
+  isSoleRemoteTerminalQueryOwner(ptyId: string): boolean {
+    return (
+      this.terminalViewSubscribers.remoteReceivingOutputCount(ptyId) === 1 &&
+      shouldModelAnswerHiddenPtyQueries({
+        ptyId,
+        settings: this.store?.getSettings(),
+        hasRemoteViewSubscriber: false
+      })
+    )
+  }
+
+  /** Answer stateless queries a sole remote view owned at ingestion but will never receive. */
+  answerYieldedTerminalQueries(ptyId: string, statelessQueryData: string): void {
+    const state = this.headlessTerminals.get(ptyId)
+    if (!state) {
+      return
+    }
+    state.writeChain = state.writeChain
+      .then(async () => {
+        // Why drop, not retry: injecting mid-escape corrupts live parsing, and a deferred reply risks arriving after the query timed out.
+        if (state.emulator.partialEscapeTailAnsi === '') {
+          await state.emulator.write(statelessQueryData, { forwardQueryReplies: true })
+        }
+      })
+      .catch(() => {})
+  }
+
   protected trackHeadlessTerminalData(
     ptyId: string,
     data: string,

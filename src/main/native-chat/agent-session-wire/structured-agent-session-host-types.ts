@@ -1,3 +1,4 @@
+import type { AgentSessionStopOutcome } from './structured-agent-session-adapter-stop'
 import type { StructuredAgentSessionRequestFailure } from './structured-agent-session-request-failures'
 import type { StructuredAgentSessionStatusObserverOptions } from './structured-agent-session-status-observation'
 import type { SubmissionRejectionFact } from '../../../shared/agent-session-failure'
@@ -57,6 +58,7 @@ export type StructuredAgentSessionChildClose = {
   readonly quit?: true
   readonly reason: string | null
   readonly failure?: SubmissionRejectionFact
+  stopOutcome?: AgentSessionStopOutcome
   /** Fold Stop before settling work; repeated unnamed personal closes reopen settlement. */
   recorded: Promise<JournalStopSettle | null>
   /** Order child exit at the Stop request; repeated requests advance this boundary. */
