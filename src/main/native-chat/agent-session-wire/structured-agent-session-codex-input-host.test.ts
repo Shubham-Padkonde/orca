@@ -391,11 +391,16 @@ it.each([
     await host.flushStreamedEvents(SESSION)
     const measured =
       population > 1 ? measureCodexInputWork(host, events, 'history', population) : undefined
+    let waiting: ReturnType<typeof host.waitForSendSettlement> | undefined
     try {
       if (mode === 'auto-before') {
         await pick('auto')
       }
       const id = await permissionSend('follow up')
+      if (measured) {
+        waiting = host.waitForSendSettlement(SESSION, id)
+        void waiting.catch(() => {})
+      }
       await vi.waitFor(() =>
         expect(codex.connections[0]?.calls.some((r) => r.method === 'turn/steer')).toBe(true)
       )
@@ -452,8 +457,18 @@ it.each([
       for (const stoppedId of stoppedIds.slice(1)) {
         expect(JSON.stringify(starts()[1]?.params?.input)).toContain(stoppedId)
       }
+      if (waiting) {
+        await began(id)
+        expect(submission((await waiting)?.value)).toMatchObject({
+          clientMessageId: id,
+          dispatchState: 'accepted'
+        })
+        expect(host['clientDelivery']['sendSettlement']['waiters'].has(SESSION)).toBe(false)
+      }
     } finally {
       refusal.resolve({})
+      host['clientDelivery']['sendSettlement'].closeSession(SESSION)
+      await waiting?.catch(() => {})
       await measured?.()
     }
   }
