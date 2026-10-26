@@ -12,7 +12,6 @@ import {
   assertCliConversationWritersExited,
   type CliWriterHost
 } from '../runtime/structured-agent-cli-writers'
-
 const { fullTable, identityTable, jobMembers, consoleMembers } = vi.hoisted(() => ({
   fullTable: vi.fn(),
   identityTable: vi.fn(),
