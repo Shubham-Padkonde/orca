@@ -73,6 +73,10 @@
         "af6e02c44a": "page",
         "f5a6b38a14": "sheet"
       },
+      "NativeChatResumeOnRestartModal": {
+        "serverResumeHere": "Resume {{count}} chats started here",
+        "serverResumeHereOne": "Resume 1 chat started here"
+      },
       "NewWorkspaceComposerCard": {
         "0e587e31fb": "yaml",
         "2132b670da": "both",
@@ -1809,6 +1813,15 @@
             }
           }
         },
+        "claudeSubagentNavigation": {
+          "search": {
+            "mod": "mod",
+            "navigation": "navigation",
+            "plugin": "plugin",
+            "shortcut": "shortcut",
+            "subagent": "subagent"
+          }
+        },
         "computerUseSkillRuntime": {
           "thisDevice": "This device"
         },
@@ -2915,6 +2928,7 @@
         "nativeDropTempCopyFailed_other": "Orca couldn't copy {{count}} dropped files."
       },
       "useIpcEvents": {
+        "56d3ec4203": "Failed to create untitled markdown file.",
         "60428567b4": "Local terminal reveal is unavailable while a remote runtime is active",
         "f6300deb8b": "New Browser Tab"
       },
@@ -2931,6 +2945,9 @@
             }
           }
         }
+      },
+      "claudeAgentRowView": {
+        "restartRequired": "Restart Claude in this pane to enable subagent navigation. Recent Claude versions with Orca hooks are required."
       },
       "dropSkipReason": {
         "missing": "No longer at its original path.",
@@ -3463,7 +3480,18 @@
     "agents": {
       "loadingHost": "Loading agent settings…",
       "permissionChoiceDescription": "Applies where each agent supports this mode. Change one agent below.",
-      "permissionResetsOwnChoices": "Choosing a mode here resets the agents marked as set separately."
+      "permissionOverridesKept": "{{count}} agents still use their own permission setting:",
+      "permissionOverridesKept_one": "{{count}} agent still uses their own permission setting:",
+      "permissionOverridesKept_other": "{{count}} agents still use their own permission setting:",
+      "permissionOverridesFollow": "{{count}} agents now follow {{mode}}",
+      "permissionOverridesFollow_one": "{{count}} agent now follows {{mode}}",
+      "permissionOverridesFollow_other": "{{count}} agents now follow {{mode}}",
+      "permissionOverrideFollows": "{{agent}} now follows {{mode}}",
+      "permissionOverrideMore": "and {{count}} more",
+      "permissionOverrideMore_one": "and {{count}} more",
+      "permissionOverrideMore_other": "and {{count}} more",
+      "permissionOverridesUse": "Use {{mode}}",
+      "permissionEachOwnDescription": "Orca adds nothing; each CLI uses its own config"
     },
     "browser": {
       "clientHostedRemote": {

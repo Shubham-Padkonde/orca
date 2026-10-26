@@ -276,6 +276,7 @@ export function registerCoreHandlers(
     ensureStructuredSessionOwnership
   })
   registerAiVaultHandlers({
+    getUserDataPath: () => app.getPath('userData'),
     ensureStructuredSessionOwnership,
     getProjectOwnershipCatalog: () =>
       sessionSearchScopeCatalogFromStore(store, LOCAL_EXECUTION_HOST_ID),

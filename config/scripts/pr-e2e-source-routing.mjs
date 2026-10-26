@@ -497,6 +497,17 @@ export const PR_E2E_SOURCE_ROUTES = [
         /^src\/.*(?:[Cc]lient-?[Hh]osted|browser-host-(?:lease|page|client-page)|browser-client-(?:host|page)|runtime-browser-(?:client-)?page|session-tabs-sync|host-session-snapshot-authority|orca-runtime\.ts|\/runtime-(?:status|types)\.ts)/.test(
           file
         ))
+  },
+  {
+    // Connector code only: the shared launcher, writer and hook store it reuses already have their own routes.
+    id: 'connectors.headless-serve-conversation',
+    specs: ['tests/e2e/connector-headless-serve.spec.ts'],
+    matches: (file) =>
+      file === 'tests/e2e/helpers/connector-fake-claude.ts' ||
+      (isProductSource(file) &&
+        /^src\/(?:main\/external-conversations\/|main\/runtime\/rpc\/methods\/connector\.ts$|cli\/(?:handlers|specs)\/connector\.ts$|shared\/rpc-contract\/connector-params\.ts$)/.test(
+          file
+        ))
   }
 ]
 

@@ -205,7 +205,6 @@
 2 src/renderer/src/hooks/ipc-events/app-lifetime-ipc-bridge.ts
 1 src/renderer/src/hooks/ipc-events/runtime-environment-subscription-selection.ts
 1 src/renderer/src/hooks/ipc-events/settings-sidebar-ipc-bridge.ts
-1 src/renderer/src/hooks/ipc-events/tab-lifecycle-ipc-bridge.ts
 1 src/renderer/src/hooks/ipc-events/terminal-request-ipc-bridge.ts
 1 src/renderer/src/hooks/use-active-skill-discovery-runtime-target.ts
 1 src/renderer/src/hooks/useActiveProjectSkillRuntime.ts
@@ -329,7 +328,7 @@
 1 src/renderer/src/store/terminals/terminal-tab-close-providers.ts
 1 src/renderer/src/web/preload-api/web-app-api.ts
 3 src/renderer/src/web/preload-api/web-preference-normalization.ts
-21 src/renderer/src/web/preload-api/web-preferences-store.ts
+20 src/renderer/src/web/preload-api/web-preferences-store.ts
 13 src/renderer/src/web/preload-api/web-settings-api.ts
 9 src/renderer/src/web/preload-api/web-ui-api.ts
 3 src/renderer/src/web/preload-api/web-workspace-session-api.ts

@@ -9094,7 +9094,7 @@
       "src/renderer/src/components/terminal-pane/terminal-context-menu-dismiss.test.ts": 33,
       "src/renderer/src/components/terminal-pane/terminal-copy-rejection-handling.test.ts": 44,
       "src/renderer/src/components/terminal-pane/terminal-copy-shortcut.test.ts": 1457,
-      "src/renderer/src/components/terminal-pane/terminal-ctrl-arrow-conpty.test.ts": 1372,
+      "src/renderer/src/components/terminal-pane/terminal-pane-local-windows-conpty.test.ts": 1372,
       "src/renderer/src/components/terminal-pane/terminal-ctrl-enter.test.ts": 92,
       "src/renderer/src/components/terminal-pane/terminal-cursor-appearance-precedence.test.ts": 296,
       "src/renderer/src/components/terminal-pane/terminal-cursor-inactive-style.test.ts": 337,
