@@ -251,11 +251,12 @@ it('publishes post-cache ownership at an unchanged stamp through Unlimited RPC a
     expect(history.conditional.mock.calls.every(([, after]) => after === undefined)).toBe(true)
 
     await history.mount(250)
+    expect(history.listHashCalls()).toBe(1)
     history.setOwner('repo:c')
     await history.refresh()
     expect(history.outputs.at(-1)?.fingerprint).toMatch(/^[0-9a-f]{64}$/)
     expect(history.current().sessions[0].projectOwnerKey).toBe('repo:c')
-    expect(history.listHashCalls()).toBe(1)
+    expect(history.listHashCalls()).toBe(2)
   } finally {
     await history.close()
   }
