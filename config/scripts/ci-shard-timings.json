@@ -9632,7 +9632,7 @@
       "src/renderer/src/components/task-page-localized-options.test.ts": 211,
       "src/renderer/src/components/task-page-mutation-page-allocation.test.ts": 128,
       "src/renderer/src/components/task-page-new-issue-draft.test.ts": 76,
-      "src/renderer/src/components/task-page-pr-check-summary.test.ts": 34,
+      "src/renderer/src/components/task-page/task-page-pr-check-summary.test.ts": 34,
       "src/renderer/src/components/task-page-repo-source-context.test.ts": 407,
       "src/renderer/src/components/task-page-repo-source-divergence.test.ts": 1043,
       "src/renderer/src/components/task-page-task-source-host-availability.test.ts": 401,

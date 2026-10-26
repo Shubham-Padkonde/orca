@@ -2575,6 +2575,7 @@
               "metric": {
                 "workingSetDescription": "Working set somado (WS): páginas residentes na RAM agora. Páginas compartilhadas podem aparecer em mais de um processo, e a memória que o Windows paginou para o disco não é contada aqui.",
                 "privateBytesDescription": "Bytes privados somados: memória que esses processos comprometeram, contada esteja ela residente ou paginada para o disco. É isso que o host cobra contra seu limite de comprometimento, então continua subindo enquanto o working set acima diminui sob paginação.",
+                "footprintDescription": "Pegada de memória somada, o mesmo valor que o Monitor de Atividade mostra: a memória de cada processo, incluindo memória gráfica. Páginas compartilhadas entre processos não são contadas duas vezes.",
                 "rssDescription": "Tamanho do conjunto residente somado (RSS). Páginas compartilhadas ou com alias podem aparecer em mais de um processo."
               }
             },
@@ -9889,6 +9890,7 @@
             "prepareSessionResumeFailed": "Não foi possível preparar esta sessão para retomada.",
             "sessionDeleted": "Sessão excluída",
             "sessionDeleteFailed": "Não foi possível excluir a sessão",
+            "sessionDeleteCheckingHost": "Verificando {{value0}}…",
             "resumeInChatConflict": "Outro chat já está mantendo esta conversa.",
             "resumeInChatTranscriptMissing": "O histórico desta conversa não pôde ser carregado, então ela não pode ser retomada no chat.",
             "resumeInChatFailed": "Não foi possível retomar esta sessão em um novo chat.",
@@ -9926,6 +9928,7 @@
             "subagentCountPlural": "{{value0}} subagentes",
             "delete": "Excluir",
             "deleteReasonNonLocalHost": "Somente sessões neste dispositivo podem ser excluídas.",
+            "deleteReasonHostUpdateRequired": "Atualize {{value0}} para excluir as sessões dele daqui.",
             "deleteReasonSyntheticPath": "Esta sessão não pode ser excluída do Orca.",
             "deleteReasonUnsupportedAgent": "Sessões de {{value0}} não podem ser excluídas do Orca.",
             "resumeInNewNativeChat": "Retomar em novo chat",
@@ -10373,6 +10376,7 @@
           "AiVaultSessionDeleteDialog": {
             "title": "Excluir esta sessão?",
             "description": "\"{{value0}}\" será excluída. Depois de excluída, ela também não poderá mais ser retomada pela própria linha de comando de {{value1}}.",
+            "remoteDescription": "\"{{value0}}\" será excluída de {{value2}}. Depois de excluída, também não poderá mais ser retomada pela linha de comando do {{value1}}.",
             "confirm": "Excluir"
           },
           "FileExplorerNameFilter": {
