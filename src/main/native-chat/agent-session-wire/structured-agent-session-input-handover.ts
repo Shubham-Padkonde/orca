@@ -37,7 +37,8 @@ export function beginStructuredAgentSessionInputHandover(
   session: StructuredAgentSessionHostSession,
   awaitedChild: StructuredAgentSessionProviderChild,
   next: AgentJournalSubmission,
-  isDisposed: () => boolean
+  isDisposed: () => boolean,
+  keepsTurn?: (providerTurn: () => string | null) => boolean
 ): Promise<StructuredAgentSessionPendingHandover | null> {
   let binding = awaitedChild
   let recorder = deps.recordRanOptions?.(sessionId, binding.fence)
@@ -80,6 +81,7 @@ export function beginStructuredAgentSessionInputHandover(
       fence: awaitedChild.fence,
       adapter: deps.adapter,
       agents: deps.agents,
+      logger: deps.logger,
       failureTextContext: deps.failureTextContext(sessionId),
       record: () => deps.record(sessionId),
 
@@ -150,7 +152,7 @@ export function beginStructuredAgentSessionInputHandover(
               ) {
                 throw new Error('input continuation no longer owns its submission')
               }
-              await deps.retireOutgrownChild(sessionId, next.clientMessageId)
+              await deps.retireOutgrownChild(sessionId, next)
               signal?.throwIfAborted()
               if (!ownsInput() || (session.child && session.child !== binding)) {
                 throw new Error('input continuation lost its provider binding')
@@ -256,6 +258,7 @@ export function beginStructuredAgentSessionInputHandover(
     next,
     // Re-read right before the provider call, which runs outside the serialize.
     isCurrent,
-    isBound
+    isBound,
+    keepsTurn
   )
 }

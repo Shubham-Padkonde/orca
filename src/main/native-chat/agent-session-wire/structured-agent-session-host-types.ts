@@ -1,3 +1,8 @@
+import type { StructuredAgentSessionDeliveryLoop } from './structured-agent-session-delivery-loop'
+import type {
+  OpenedStructuredAgentSessionConversation,
+  StructuredAgentSessionConversationOpenOptions
+} from './structured-agent-session-conversation-open'
 import type { createStructuredAgentSessionConversationLifetime } from './structured-agent-session-conversation-lifetime'
 import type { UnsentSendHold } from '../agent-session-journal/journal-unsent-send-hold'
 import type { StructuredAgentSessionRequestFailure } from './structured-agent-session-request-failures'
@@ -194,6 +199,7 @@ export type StructuredAgentSessionConversationNaming = {
 }
 
 export type AgentSessionHandoverContext = StructuredAgentSessionCommandHandoverContext & {
+  logger?: StructuredAgentSessionLogger
   admitFreshInput?: StructuredAgentSessionAdmitHostInput
   continueInput?: StructuredAgentSessionContinueInput
   acquireAborts?: Pick<StructuredAgentSessionAcquireAborts, 'begin'>
@@ -212,3 +218,20 @@ export type AgentSessionHandoverContext = StructuredAgentSessionCommandHandoverC
 export type StructuredAgentSessionConversationLifetime = ReturnType<
   typeof createStructuredAgentSessionConversationLifetime
 >
+
+export type StructuredAgentSessionConversationDelivery = {
+  loop: StructuredAgentSessionDeliveryLoop
+  open: (
+    sessionId: string,
+    options?: StructuredAgentSessionConversationOpenOptions
+  ) => Promise<StructuredAgentSessionHostSession | null>
+  /** Queue commit wakes under serialization so they cannot race a loop’s stopping decision. */
+  afterCommit: (sessionId: string, journal: AgentSessionJournal) => void
+  /** Settle edges affect status/steer holds without rows or renewed idle activity. */
+  afterSettleEdge: (sessionId: string, journal: AgentSessionJournal) => void
+  dispose: () => void
+  adoptOpened: (
+    sessionId: string,
+    opened: OpenedStructuredAgentSessionConversation
+  ) => Promise<void>
+}
