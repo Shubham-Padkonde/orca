@@ -18,10 +18,26 @@ const TRUST_KEYWORD_RE = /trust/i
 const TRUST_KEYWORD_CARRY_CHARS = 'trust'.length - 1
 const TRUST_DIALOG_PAINT_BYTES = 4096
 
+// A live dialog ends on its key footer with the trust choice just above; quoted dialog text in a reply does not.
+const TRUST_DIALOG_FOOTER_RE = /^(?:enter to confirm · esc to cancel|enter continue · esc quit)$/
+const TRUST_DIALOG_CHOICE_RE =
+  /^(?:[❯›]\s*)?(?:\d+\.\s*)?(?:yes, i trust this folder|trust and continue)$/
+const TRUST_DIALOG_CHOICE_ROWS = 6
+
 function isTrustDialogOnScreen(emulator: HeadlessEmulator): boolean {
-  const reason = findTerminalWaitBlockedSignal(
-    emulator.getVisibleLines().join('\n').toLowerCase()
-  )?.reason
+  const lines = emulator
+    .getVisibleLines()
+    .map((line) => line.trim().toLowerCase())
+    .filter(Boolean)
+  if (!TRUST_DIALOG_FOOTER_RE.test(lines.at(-1) ?? '')) {
+    return false
+  }
+  if (
+    !lines.slice(-TRUST_DIALOG_CHOICE_ROWS, -1).some((line) => TRUST_DIALOG_CHOICE_RE.test(line))
+  ) {
+    return false
+  }
+  const reason = findTerminalWaitBlockedSignal(lines.join('\n'))?.reason
   return reason === 'agent-trust-workspace' || reason === 'codex-trust-workspace'
 }
 
@@ -54,6 +70,11 @@ export function observeTrustDialogScreenChange(
   }
   scan.shown = onScreen
   return onScreen
+}
+
+/** The agent left: stop reading the screen until the keyword is painted again. */
+export function forgetTrustDialog(emulator: HeadlessEmulator): void {
+  scans.delete(emulator)
 }
 
 export function isTrustDialogShown(emulator: HeadlessEmulator): boolean {

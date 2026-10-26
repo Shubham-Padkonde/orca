@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { HeadlessEmulator } from '../daemon/headless-emulator'
 import type { AgentStatusIpcPayload } from '../../shared/agent-status-types'
 import {
@@ -7,6 +7,11 @@ import {
   trustDialogSettledStatus,
   trustDialogWaitingStatus
 } from './startup-dialog-terminal-status'
+import {
+  createTranscriptPane,
+  TRANSCRIPT_PANE_PTY_ID,
+  type TranscriptPaneOptions
+} from './agent-transcript-pane-test-harness'
 
 function fixture(name: string): { recording: string; cols: number; rows: number } {
   const url = (ext: string) => new URL(`./__fixtures__/${name}.${ext}`, import.meta.url)
@@ -48,7 +53,9 @@ describe('startup trust dialog terminal status', () => {
     ['claude-dialog-trust-workspace-answered', 1, [true, false]],
     ['claude-dialog-trust-workspace-answered', 64, [true, false]],
     ['codex-0-158-0-trustprompt', 1, [true]],
-    ['codex-0-158-0-trustprompt', 8192, [true]]
+    ['codex-0-158-0-trustprompt', 8192, [true]],
+    ['codex-0-164-0-trustprompt-answered', 1, [true, false]],
+    ['codex-0-164-0-trustprompt-answered', 64, [true, false]]
   ] as const)('replays %s in %i-byte chunks', async (name, size, expected) => {
     const { recording, cols, rows } = fixture(name)
     const emulator = new HeadlessEmulator({ cols, rows })
@@ -56,6 +63,67 @@ describe('startup trust dialog terminal status', () => {
       expect(await replay(emulator, recording, size)).toEqual(expected)
     } finally {
       emulator.dispose()
+    }
+  })
+
+  it('ignores the dialog wording quoted in ordinary output', async () => {
+    const emulator = new HeadlessEmulator({ cols: 100, rows: 24 })
+    try {
+      const reply =
+        '• Codex shows "Do you trust this folder?" with 1. Trust and continue\r\n' +
+        '  and Claude shows "Yes, I trust this folder".\r\n\r\n' +
+        '› Ask Codex to do anything\r\n  gpt-5 · ~/repo\r\n'
+      expect(await replay(emulator, reply, 8192)).toEqual([])
+    } finally {
+      emulator.dispose()
+    }
+  })
+
+  it('clears when the exiting agent erases its dialog under the shell prompt', async () => {
+    const { recording, cols, rows } = fixture('claude-dialog-trust-workspace')
+    const emulator = new HeadlessEmulator({ cols, rows })
+    try {
+      expect(await replay(emulator, recording, 8192)).toEqual([true])
+      expect(await replay(emulator, '\x1b[J\r\nuser@host repo $ ', 8192)).toEqual([false])
+      // Cleared panes stop reading the screen until the keyword is painted again.
+      expect(await replay(emulator, 'ls\r\n', 8192)).toEqual([])
+    } finally {
+      emulator.dispose()
+    }
+  })
+
+  it('settles the row when a killed agent leaves its dialog frame above the shell prompt', async () => {
+    const rows = new Map<string, AgentStatusIpcPayload>()
+    const pane: TranscriptPaneOptions = {
+      paneTitle: 'Terminal',
+      foregroundProcess: '2.1.310',
+      launchAgent: 'claude',
+      size: { cols: 120, rows: 40 },
+      data: ''
+    }
+    const { runtime } = await createTranscriptPane(pane, {
+      onTerminalAgentStatus: ({ paneKey, payload }) => {
+        rows.set(paneKey, row({ ...payload, paneKey }))
+      },
+      getAgentStatusSnapshotForPane: (paneKey) => {
+        const current = rows.get(paneKey)
+        return current ? [current] : []
+      }
+    })
+    const states = () => [...rows.values()].map((current) => current.state)
+    try {
+      runtime.onPtyData(
+        TRANSCRIPT_PANE_PTY_ID,
+        fixture('claude-dialog-trust-workspace').recording,
+        1
+      )
+      await vi.waitFor(() => expect(states()).toEqual(['waiting']))
+      // The shell prompt lands inside the stale frame, so only the foreground proves the exit.
+      pane.foregroundProcess = 'zsh'
+      runtime.onPtyData(TRANSCRIPT_PANE_PTY_ID, 'user@host repo $ ', 2)
+      await vi.waitFor(() => expect(states()).toEqual(['done']))
+    } finally {
+      await runtime.onPtyExit(TRANSCRIPT_PANE_PTY_ID, 0)
     }
   })
 

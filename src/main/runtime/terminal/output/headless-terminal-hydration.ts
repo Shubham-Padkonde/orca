@@ -13,7 +13,9 @@ import {
   observeCodexCapacityTerminalStatus,
   observeCodexReconnectFailure
 } from '../../codex-notice-terminal-status'
+import { isShellProcess } from '../../../../shared/shell-process-detection'
 import {
+  forgetTrustDialog,
   isTrustDialogShown,
   observeTrustDialogScreenChange,
   trustDialogSettledStatus,
@@ -246,6 +248,9 @@ export abstract class OrcaRuntimeWithMaybeHydrateHeadlessFromRenderer extends Or
   ): void {
     const shown = observeTrustDialogScreenChange(state.emulator, chunk)
     if (shown === null) {
+      if (isTrustDialogShown(state.emulator)) {
+        this.settleTrustDialogIfAgentExited(ptyId, pty, state)
+      }
       return
     }
     if (!shown) {
@@ -265,11 +270,7 @@ export abstract class OrcaRuntimeWithMaybeHydrateHeadlessFromRenderer extends Or
     }
     // An agent typed into a shell paints its dialog before the foreground-process probe names it.
     void this.ptyForegroundAgent.refresh(ptyId).then(() => {
-      if (
-        this.ptysById.get(ptyId) !== pty ||
-        this.headlessTerminals.get(ptyId) !== state ||
-        !isTrustDialogShown(state.emulator)
-      ) {
+      if (!this.isTrustDialogStillShown(ptyId, pty, state)) {
         return
       }
       const waiting = trustDialogWaitingStatus(
@@ -278,6 +279,41 @@ export abstract class OrcaRuntimeWithMaybeHydrateHeadlessFromRenderer extends Or
       )
       if (waiting) {
         this.publishTrustDialogStatus(ptyId, waiting)
+      }
+    })
+  }
+
+  private isTrustDialogStillShown(
+    ptyId: string,
+    pty: RuntimePtyWorktreeRecord,
+    state: RuntimeHeadlessTerminal
+  ): boolean {
+    return (
+      this.ptysById.get(ptyId) === pty &&
+      this.headlessTerminals.get(ptyId) === state &&
+      isTrustDialogShown(state.emulator)
+    )
+  }
+
+  /** A killed agent can leave its dialog frame painted above the shell prompt. */
+  private settleTrustDialogIfAgentExited(
+    ptyId: string,
+    pty: RuntimePtyWorktreeRecord,
+    state: RuntimeHeadlessTerminal
+  ): void {
+    void this.ptyForegroundAgent.read(ptyId)?.then((read) => {
+      if (
+        !read.available ||
+        !read.process ||
+        !isShellProcess(read.process) ||
+        !this.isTrustDialogStillShown(ptyId, pty, state)
+      ) {
+        return
+      }
+      forgetTrustDialog(state.emulator)
+      const settled = trustDialogSettledStatus(this.readPtyAgentStatusRow(ptyId, pty))
+      if (settled) {
+        this.publishTrustDialogStatus(ptyId, settled)
       }
     })
   }
