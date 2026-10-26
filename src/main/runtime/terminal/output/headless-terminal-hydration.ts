@@ -2,10 +2,7 @@ import type {
   RuntimeHeadlessTerminal,
   RuntimePtyWorktreeRecord
 } from '../../runtime-terminal-state-records'
-import type {
-  AgentStatusIpcPayload,
-  ParsedAgentStatusPayload
-} from '../../../../shared/agent-status-types'
+import type { AgentStatusIpcPayload } from '../../../../shared/agent-status-types'
 import { splitFreebuffScreenUpdates } from '../../../../shared/freebuff-screen-status'
 import { OrcaRuntimeWithSerializeMainTerminalBuffer } from './terminal-buffer-operations'
 import { observeFreebuffTerminalStatus } from '../../freebuff-terminal-status'
@@ -13,15 +10,7 @@ import {
   observeCodexCapacityTerminalStatus,
   observeCodexReconnectFailure
 } from '../../codex-notice-terminal-status'
-import {
-  confirmTrustDialogGone,
-  forgetTrustDialog,
-  isTrustDialogShown,
-  observeTrustDialogScreenChange,
-  trustDialogSettledStatus,
-  trustDialogWaitingStatus
-} from '../../startup-dialog-terminal-status'
-import { TUI_IDLE_QUIESCENCE_MS } from '../../orca-runtime-postlude'
+import { TrustDialogStatusObserver } from '../../trust-dialog-status-observer'
 import type { LaunchedAgentForeground } from '../../launched-agent-foreground'
 import type { TuiAgent } from '../../../../shared/tui-agent'
 import { DESKTOP_TERMINAL_SCROLLBACK_ROWS_DEFAULT } from '../../../../shared/terminal-scrollback-policy'
@@ -40,7 +29,24 @@ export abstract class OrcaRuntimeWithMaybeHydrateHeadlessFromRenderer extends Or
     agent: TuiAgent
   ): Promise<LaunchedAgentForeground>
 
-  private readonly trustDialogSettleTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  private readonly trustDialogStatus = new TrustDialogStatusObserver({
+    getPaneAgent: (ptyId) => this.getPaneAgentForTuiIdle(ptyId),
+    refreshForegroundAgent: (ptyId) => this.ptyForegroundAgent.refresh(ptyId),
+    readLaunchedAgentForeground: (ptyId, agent) => this.readLaunchedAgentForeground(ptyId, agent),
+    isCurrentEmulator: (ptyId, emulator) =>
+      this.headlessTerminals.get(ptyId)?.emulator === emulator && this.ptysById.has(ptyId),
+    readStatus: (ptyId) => {
+      const pty = this.ptysById.get(ptyId)
+      return pty ? this.readPtyAgentStatusRow(ptyId, pty) : undefined
+    },
+    publish: (ptyId, payload) =>
+      this.emitTerminalAgentStatusEvents(
+        ptyId,
+        { cleanData: '', payloads: [payload], lastPayloadCleanOffset: null },
+        undefined,
+        false
+      )
+  })
 
   // Create emulator state synchronously and chain renderer hydration first so concurrent live bytes cannot be overwritten by a late seed (docs/mobile-prefer-renderer-scrollback.md).
   maybeHydrateHeadlessFromRenderer(ptyId: string): Promise<boolean> | null {
@@ -227,7 +233,7 @@ export abstract class OrcaRuntimeWithMaybeHydrateHeadlessFromRenderer extends Or
         }
         if (!pty.connectionId) {
           // Runs every chunk: its scan tracks when the dialog leaves the screen.
-          this.observeTrustDialogStatus(ptyId, pty, state, chunk, readStatus)
+          this.trustDialogStatus.observe(ptyId, state.emulator, chunk)
           const payload =
             observeCodexCapacityTerminalStatus(
               state.emulator,
@@ -264,110 +270,5 @@ export abstract class OrcaRuntimeWithMaybeHydrateHeadlessFromRenderer extends Or
       this.getLeavesForPty(ptyId).map((leaf) => this.makeRuntimePaneKey(leaf))[0] ??
       this.paneOfPty(pty).paneKey
     return paneKey ? this.getAgentStatusSnapshotForPaneFn?.(paneKey)[0] : undefined
-  }
-
-  /** A sidebar projection of the blocked text agentWait already reads, never first-party agent evidence. */
-  private publishTrustDialogStatus(ptyId: string, payload: ParsedAgentStatusPayload): void {
-    this.emitTerminalAgentStatusEvents(
-      ptyId,
-      { cleanData: '', payloads: [payload], lastPayloadCleanOffset: null },
-      undefined,
-      false
-    )
-  }
-
-  private observeTrustDialogStatus(
-    ptyId: string,
-    pty: RuntimePtyWorktreeRecord,
-    state: RuntimeHeadlessTerminal,
-    chunk: string,
-    readStatus: () => AgentStatusIpcPayload | undefined
-  ): void {
-    const read = observeTrustDialogScreenChange(state.emulator, chunk)
-    if (read === null) {
-      return
-    }
-    if (read !== 'appeared') {
-      this.scheduleTrustDialogSettleCheck(ptyId, pty, state)
-      return
-    }
-    const agent = this.getPaneAgentForTuiIdle(ptyId)
-    if (agent) {
-      const waiting = trustDialogWaitingStatus(agent, readStatus())
-      if (waiting) {
-        this.publishTrustDialogStatus(ptyId, waiting)
-      }
-      return
-    }
-    // An agent typed into a shell paints its dialog before the foreground-process probe names it.
-    void this.ptyForegroundAgent.refresh(ptyId).then(() => {
-      if (!this.isTrustDialogStillShown(ptyId, pty, state)) {
-        return
-      }
-      const waiting = trustDialogWaitingStatus(
-        this.getPaneAgentForTuiIdle(ptyId),
-        this.readPtyAgentStatusRow(ptyId, pty)
-      )
-      if (waiting) {
-        this.publishTrustDialogStatus(ptyId, waiting)
-      }
-    })
-  }
-
-  private isTrustDialogStillShown(
-    ptyId: string,
-    pty: RuntimePtyWorktreeRecord,
-    state: RuntimeHeadlessTerminal
-  ): boolean {
-    return (
-      this.ptysById.get(ptyId) === pty &&
-      this.headlessTerminals.get(ptyId) === state &&
-      isTrustDialogShown(state.emulator)
-    )
-  }
-
-  /** Settles only on positive evidence once output goes quiet, so a repaint split across reads never re-notifies. */
-  private scheduleTrustDialogSettleCheck(
-    ptyId: string,
-    pty: RuntimePtyWorktreeRecord,
-    state: RuntimeHeadlessTerminal
-  ): void {
-    clearTimeout(this.trustDialogSettleTimers.get(ptyId))
-    const timer = setTimeout(() => {
-      this.trustDialogSettleTimers.delete(ptyId)
-      void this.settleTrustDialog(ptyId, pty, state)
-    }, TUI_IDLE_QUIESCENCE_MS)
-    timer.unref?.()
-    this.trustDialogSettleTimers.set(ptyId, timer)
-  }
-
-  private async settleTrustDialog(
-    ptyId: string,
-    pty: RuntimePtyWorktreeRecord,
-    state: RuntimeHeadlessTerminal
-  ): Promise<void> {
-    if (!this.isTrustDialogStillShown(ptyId, pty, state)) {
-      return
-    }
-    const settled = trustDialogSettledStatus(this.readPtyAgentStatusRow(ptyId, pty))
-    const agent =
-      settled?.agentType === 'claude' ? 'claude' : settled?.agentType === 'codex' ? 'codex' : null
-    // A hook that reported since owns the pane: stop tracking without touching its row.
-    if (!agent) {
-      forgetTrustDialog(state.emulator)
-      return
-    }
-    if (!confirmTrustDialogGone(state.emulator)) {
-      // A killed agent can leave its frame painted above the shell prompt; only a proven shell foreground settles it.
-      const foreground = await this.readLaunchedAgentForeground(ptyId, agent)
-      if (foreground !== 'shell' || !this.isTrustDialogStillShown(ptyId, pty, state)) {
-        return
-      }
-      forgetTrustDialog(state.emulator)
-    }
-    const stillOurs = trustDialogSettledStatus(this.readPtyAgentStatusRow(ptyId, pty))
-    if (stillOurs) {
-      this.publishTrustDialogStatus(ptyId, stillOurs)
-    }
   }
 }
