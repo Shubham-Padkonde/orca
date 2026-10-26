@@ -121,29 +121,33 @@ describe('startup trust dialog terminal status', () => {
     }
   })
 
-  // Real timers: the settle check waits out TUI_IDLE_QUIESCENCE_MS of quiet output.
+  // Past the settle check's TUI_IDLE_QUIESCENCE_MS quiet window.
   const quietMs = TUI_IDLE_QUIESCENCE_MS + 1_000
-  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
   it('keeps one waiting row through a resize repaint and settles after a quiet erase', async () => {
+    vi.useFakeTimers()
     const { runtime, published } = await createTrustDialogPane()
     const dialog = fixture('claude-dialog-trust-workspace').recording
     try {
       runtime.onPtyData(TRANSCRIPT_PANE_PTY_ID, dialog, 1)
-      await vi.waitFor(() => expect(published).toEqual(['waiting']))
+      await vi.advanceTimersByTimeAsync(100)
+      expect(published).toEqual(['waiting'])
       // A resize repaint split across reads: the clear lands before the redrawn dialog.
       runtime.onPtyData(TRANSCRIPT_PANE_PTY_ID, '\x1b[2J\x1b[H', 2)
       runtime.onPtyData(TRANSCRIPT_PANE_PTY_ID, dialog, 3)
-      await sleep(quietMs)
+      await vi.advanceTimersByTimeAsync(quietMs)
       expect(published).toEqual(['waiting'])
       runtime.onPtyData(TRANSCRIPT_PANE_PTY_ID, '\x1b[J\r\nuser@host repo $ ', 4)
-      await vi.waitFor(() => expect(published).toEqual(['waiting', 'done']), { timeout: quietMs })
+      await vi.advanceTimersByTimeAsync(quietMs)
+      expect(published).toEqual(['waiting', 'done'])
     } finally {
       await runtime.onPtyExit(TRANSCRIPT_PANE_PTY_ID, 0)
+      vi.useRealTimers()
     }
-  }, 30_000)
+  })
 
   it("settles a killed agent's leftover frame only once the shell is proven foreground", async () => {
+    vi.useFakeTimers()
     const { runtime, published } = await createTrustDialogPane()
     const foreground = vi.spyOn(runtime, 'readLaunchedAgentForeground').mockResolvedValue('unknown')
     try {
@@ -152,18 +156,21 @@ describe('startup trust dialog terminal status', () => {
         fixture('claude-dialog-trust-workspace').recording,
         1
       )
-      await vi.waitFor(() => expect(published).toEqual(['waiting']))
+      await vi.advanceTimersByTimeAsync(100)
+      expect(published).toEqual(['waiting'])
       // The shell prompt lands inside the stale frame, so the screen still shows the dialog.
       runtime.onPtyData(TRANSCRIPT_PANE_PTY_ID, 'user@host repo $ ', 2)
-      await sleep(quietMs)
+      await vi.advanceTimersByTimeAsync(quietMs)
       expect(published).toEqual(['waiting'])
       foreground.mockResolvedValue('shell')
       runtime.onPtyData(TRANSCRIPT_PANE_PTY_ID, ' ', 3)
-      await vi.waitFor(() => expect(published).toEqual(['waiting', 'done']), { timeout: quietMs })
+      await vi.advanceTimersByTimeAsync(quietMs)
+      expect(published).toEqual(['waiting', 'done'])
     } finally {
       await runtime.onPtyExit(TRANSCRIPT_PANE_PTY_ID, 0)
+      vi.useRealTimers()
     }
-  }, 30_000)
+  })
 
   it('yields to a live hook row and settles only the row it wrote', () => {
     const waiting = trustDialogWaitingStatus('claude', undefined)
